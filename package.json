@@ -1,0 +1,26 @@
+{
+  "name": "leadtube-hub",
+  "version": "1.0.0",
+  "description": "LeadTube Hub — Unified Agency Suite with Channel Finder, Email Extractor, Screenshot Extractor & MailBlast",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "googleapis": "^144.0.0",
+    "imap-simple": "^5.1.0",
+    "mailparser": "^3.9.8",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "sql.js": "^1.11.0",
+    "uuid": "^11.0.3"
+  }
+}

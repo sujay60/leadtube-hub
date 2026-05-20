@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeadTube Hub | Unified Agency Suite</title>
+    <link rel="stylesheet" href="hub-style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/your-code.js" crossorigin="anonymous"></script>
+    <style>
+        /* Tooltip-like badge for beta/new features */
+        .badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--accent-primary);
+            color: white;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-icon">L</div>
+            <div class="logo-text">LEADTUBE <span style="color: var(--accent-primary);">HUB</span></div>
+        </div>
+
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a class="nav-link active" data-target="channel-finder">
+                    <span class="nav-icon">🔍</span>
+                    <span>Channel Finder</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-target="email-finder">
+                    <span class="nav-icon">📧</span>
+                    <span>Email Finder</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-target="screenshot-extractor">
+                    <span class="nav-icon">📸</span>
+                    <span>Screenshot Extractor</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-target="bulk-email">
+                    <span class="nav-icon">🚀</span>
+                    <span>Bulk Email Send</span>
+                </a>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link" data-target="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span>Global Settings</span>
+                </a>
+            </li>
+            
+            <div style="margin: 2rem 0 1rem 1rem; font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700;">
+                Resources
+            </div>
+            
+            <li class="nav-item">
+                <a class="nav-link" href="https://github.com" target="_blank">
+                    <span class="nav-icon">📖</span>
+                    <span>Documentation</span>
+                </a>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="user-badge">
+                <div class="avatar" style="background: linear-gradient(135deg, #6366f1, #ec4899);"></div>
+                <div class="user-info">
+                    <div style="font-weight: 600;">Agency Admin</div>
+                    <div style="font-size: 0.7rem; color: var(--text-secondary);">Pro Plan Active</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-wrapper">
+        <header class="top-bar">
+            <div class="breadcrumb" id="breadcrumb-text">Channel Finder</div>
+            <div class="top-actions" style="display: flex; gap: 1rem; align-items: center;">
+                <div id="status-indicator" style="font-size: 0.75rem; color: #10b981; display: flex; align-items: center; gap: 0.5rem;">
+                    <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></div>
+                    System Ready
+                </div>
+                <button style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: white; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.8rem;">
+                    Help & Support
+                </button>
+            </div>
+        </header>
+
+        <div class="content-frame-container">
+            <iframe id="frame-channel-finder" src="Channel Finder/app.html" class="active"></iframe>
+            <iframe id="frame-email-finder" src="Email Extractor App/app.html"></iframe>
+            <iframe id="frame-screenshot-extractor" src="Screenshot Extractor/app.html"></iframe>
+            <iframe id="frame-bulk-email" src="/mailblast"></iframe>
+        </div>
+    </main>
+
+    <script src="hub-app.js"></script>
+</body>
+</html>

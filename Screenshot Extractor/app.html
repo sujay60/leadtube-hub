@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenshot Extractor — AI Vision + OCR</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tesseract.js loaded as fallback OCR engine -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="logo">
+            <span class="icon">📸</span>
+            <h1>Screenshot <span class="highlight">Extractor</span></h1>
+        </div>
+        <div class="header-controls">
+            <!-- Tab switcher -->
+            <div class="tab-switcher">
+                <button class="tab-btn active" id="tab-extract" data-tab="extract">🔍 Extract</button>
+                <button class="tab-btn" id="tab-history" data-tab="history">📋 History <span class="history-count-badge" id="history-count-badge">0</span></button>
+            </div>
+            <div class="engine-badge" id="engine-badge">
+                <span class="engine-dot" id="engine-dot"></span>
+                <span id="engine-label">CHECKING...</span>
+            </div>
+            <button class="settings-toggle-btn" id="settings-toggle" title="API Key Settings">⚙️</button>
+        </div>
+    </header>
+
+    <!-- API Key Settings Panel (collapsible) -->
+    <section class="api-settings" id="api-settings" style="display: none;">
+        <div class="api-settings-inner">
+            <div class="api-settings-header">
+                <h3>🔑 Gemini API Key</h3>
+                <p class="api-hint">Add your Gemini API key for near-perfect accuracy. Keys are shared with Channel Finder. <a href="https://aistudio.google.com/apikey" target="_blank">Get a free key →</a></p>
+            </div>
+            <div class="api-key-row">
+                <input type="password" id="api-key-input" class="api-key-input" placeholder="Paste your Gemini API key here..." spellcheck="false" autocomplete="off">
+                <button class="api-save-btn" id="save-key-btn">Save Key</button>
+            </div>
+            <div class="api-key-status" id="api-key-status"></div>
+        </div>
+    </section>
+
+    <!-- ═══════ EXTRACT TAB ═══════ -->
+    <main class="main-content" id="view-extract">
+        <section class="upload-section" id="upload-zone">
+            <div class="upload-content">
+                <div class="upload-icon">📁</div>
+                <h2>Drag & Drop Screenshots or Folders</h2>
+                <p>or click below to select files/folders with unlimited images</p>
+                <input type="file" id="file-input" multiple accept="image/*" hidden>
+                <input type="file" id="folder-input" webkitdirectory directory multiple hidden>
+                <div class="btn-group">
+                    <button class="upload-btn" onclick="document.getElementById('file-input').click()">Browse Files</button>
+                    <button class="upload-btn btn-secondary" onclick="document.getElementById('folder-input').click()">Upload Folder</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="status-section" id="status-section" style="display: none;">
+            <div class="status-top-row">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <button class="pause-btn" id="pause-btn" title="Pause processing">⏸️ Pause</button>
+            </div>
+            <p id="status-text">Processing 0 of 0 images...</p>
+        </section>
+
+        <!-- Raw OCR Preview Panel -->
+        <section class="ocr-preview-section" id="ocr-preview" style="display: none;">
+            <div class="ocr-preview-header">
+                <h3>🔍 AI Response <span style="font-weight: 400; font-size: 0.8rem; color: var(--text-secondary);">(last processed image)</span></h3>
+                <button class="dismiss-btn" id="dismiss-ocr">✕</button>
+            </div>
+            <pre id="ocr-raw-text" class="ocr-raw-text"></pre>
+        </section>
+
+        <section class="results-section">
+            <div class="results-header">
+                <h2>Extracted Leads <span class="count-badge" id="lead-count">0</span></h2>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="show-ocr-toggle"> Show Debug
+                    </label>
+                    <button id="save-session-btn" class="export-btn" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;" disabled>
+                        💾 Save Session
+                    </button>
+                    <button id="clear-btn" class="export-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;" disabled>
+                        🗑️ Clear All
+                    </button>
+                    <button id="export-btn" class="export-btn" disabled>
+                        <span class="icon">⬇️</span> Export CSV
+                    </button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="results-table">
+                    <thead>
+                        <tr>
+                            <th>Channel Name</th>
+                            <th>Handle</th>
+                            <th>Subscribers</th>
+                            <th>Last Upload</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- ═══════ HISTORY TAB ═══════ -->
+    <main class="main-content" id="view-history" style="display: none;">
+        <section class="results-section history-panel">
+            <div class="results-header">
+                <h2>📋 Extraction History</h2>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <button id="clear-history-btn" class="export-btn" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">
+                        🗑️ Clear All History
+                    </button>
+                </div>
+            </div>
+
+            <div class="history-list" id="history-list">
+                <!-- Sessions rendered here -->
+            </div>
+        </section>
+
+        <!-- Session detail view -->
+        <section class="results-section" id="history-detail" style="display: none;">
+            <div class="results-header">
+                <h2 id="history-detail-title">Session</h2>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                    <button id="history-back-btn" class="export-btn" style="background: rgba(255,255,255,0.05); color: var(--text-primary);">
+                        ← Back
+                    </button>
+                    <button id="history-export-btn" class="export-btn">
+                        ⬇️ Export CSV
+                    </button>
+                    <button id="history-restore-btn" class="export-btn" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;">
+                        🔄 Load into Extractor
+                    </button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Channel Name</th>
+                            <th>Handle</th>
+                            <th>Subscribers</th>
+                            <th>Last Upload</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-detail-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

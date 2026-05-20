@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeadTube | Premium Creator Outreach</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/your-code.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside>
+            <div class="logo">LEADTUBE</div>
+            <nav>
+                <ul>
+                    <li class="nav-item active" id="nav-search">
+                        <span>🔍</span> Search Discovery
+                    </li>
+                    <li class="nav-item" id="nav-leads">
+                    <span>📁</span> My Leads
+                </li>
+                <li class="nav-item" id="nav-history">
+                    <span>⏳</span> Search History
+                </li>
+                <li class="nav-item" id="nav-settings">
+                        <span>⚙️</span> API Settings
+                    </li>
+                </ul>
+            </nav>
+            <div style="margin-top: auto; padding: 1rem; background: var(--bg-surface); border-radius: 12px; font-size: 0.8rem; color: var(--text-dim);">
+                Targeting youtubers for premium thumbnail designs.
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <!-- Search View -->
+            <div id="view-search">
+                <header>
+                    <h1>Discover Clients</h1>
+                    <p class="subtitle">Finding channels relevant to your target region.</p>
+                </header>
+
+
+                <section class="workflow-section">
+                    <div class="workflow-canvas">
+                        <!-- Node 1: Discovery -->
+                        <div class="node">
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header">Global Discovery <span>1</span></div>
+                            <button id="btn-niche-nuke" class="btn-secondary" style="font-size: 0.7rem; width: 100%; border: 1px solid #fbbf24; color: #fbbf24; background: rgba(251, 191, 36, 0.1); margin-bottom: 0.5rem; cursor: pointer; position: relative; z-index: 10; pointer-events: all !important;">☢️ Niche Nuke (AI Expand)</button>
+                            <textarea id="search-query" placeholder="Enter keywords (one per line)..." style="width: 100%; height: 80px; background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; font-size: 0.9rem;"></textarea>
+                            
+                            <div class="language-selector" style="margin-top: 0.75rem;">
+                                <div style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; margin-bottom: 0.4rem; font-weight: 700; letter-spacing: 0.05em;">AI Language Expansion</div>
+                                <div class="lang-tags" style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                                    <div class="lang-tag active" data-lang="English">EN</div>
+                                    <div class="lang-tag" data-lang="Spanish">ES</div>
+                                    <div class="lang-tag" data-lang="French">FR</div>
+                                    <div class="lang-tag" data-lang="German">DE</div>
+                                    <div class="lang-tag" data-lang="Portuguese">PT</div>
+                                    <div class="lang-tag" data-lang="Hindi">HI</div>
+                                    <div class="lang-tag" data-lang="Japanese">JA</div>
+                                    <div class="lang-tag" data-lang="Russian">RU</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Target Region (Hint)</label>
+                                    <select id="search-country" style="width: 100%;">
+                                        <option value="">🌍 Global (Any)</option>
+                                        <option value="US">🇺🇸 United States</option>
+                                        <option value="GB">🇬🇧 United Kingdom</option>
+                                        <option value="CA">🇨🇦 Canada</option>
+                                        <option value="AU">🇦🇺 Australia</option>
+                                        <option value="DE">🇩🇪 Germany</option>
+                                        <option value="FR">🇫🇷 France</option>
+                                        <option value="BR">🇧🇷 Brazil</option>
+                                        <option value="IN">🇮🇳 India</option>
+                                        <option value="JP">🇯🇵 Japan</option>
+                                        <option value="KR">🇰🇷 South Korea</option>
+                                        <option value="MX">🇲🇽 Mexico</option>
+                                        <option value="ES">🇪🇸 Spain</option>
+                                        <option value="IT">🇮🇹 Italy</option>
+                                        <option value="NL">🇳🇱 Netherlands</option>
+                                        <option value="SE">🇸🇪 Sweden</option>
+                                        <option value="ZA">🇿🇦 South Africa</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Exclude Regions (Comma separated codes, e.g. IN,PK)</label>
+                                    <input type="text" id="exclude-countries" placeholder="IN,PK,BD" style="width: 100%; font-size: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem; color: white;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Language Preference</label>
+                                    <select id="search-language" style="width: 100%;">
+                                        <option value="">Any Language</option>
+                                        <option value="en">English (en)</option>
+                                        <option value="es">Spanish (es)</option>
+                                        <option value="fr">French (fr)</option>
+                                        <option value="de">German (de)</option>
+                                        <option value="pt">Portuguese (pt)</option>
+                                        <option value="ja">Japanese (ja)</option>
+                                        <option value="ko">Korean (ko)</option>
+                                        <option value="ru">Russian (ru)</option>
+                                        <option value="hi">Hindi (hi)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="node-connector"></div>
+
+                        <!-- Node 1.5: External Discovery (Optional) -->
+                        <div class="node" style="border-color: rgba(99, 102, 241, 0.5); background: rgba(99, 102, 241, 0.05);">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header" style="color: var(--accent-solid); font-weight: 800;">External Recon <span>🕵️</span></div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem; line-height: 1.4;">Find unlimited leads via Google Search</div>
+                            <button id="btn-generate-google" class="btn-secondary" style="font-size: 0.7rem; width: 100%; border: 1px solid var(--accent-solid); color: var(--accent-solid); background: transparent;">Generate Shadow Links</button>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 1.6: Similar Channel Engine -->
+                        <div class="node node-pink" style="border-color: #ec4899; background: rgba(236, 72, 153, 0.05);">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header" style="color: #ec4899; font-weight: 800;">Similar Channels <span>🧬</span></div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; line-height: 1.4;">Paste any Channel Link or ID</div>
+                            <input type="text" id="lookalike-input" placeholder="youtube.com/@channel..." style="width: 100%; font-size: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem; margin-bottom: 0.5rem; color: white;">
+                            <button id="btn-lookalike" class="btn-secondary" style="font-size: 0.7rem; width: 100%; border: 1px solid #ec4899; color: #ec4899; background: transparent;">Find Similar Channels</button>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 1.7: Similar Thumbnail Engine -->
+                        <div class="node node-purple" style="border-color: #8b5cf6; background: rgba(139, 92, 246, 0.05);">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header" style="color: #8b5cf6; font-weight: 800;">Thumbnail DNA <span>🖼️</span></div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; line-height: 1.4;">Paste Video/Thumbnail URL</div>
+                            <input type="text" id="thumbnail-lookalike-input" placeholder="youtube.com/watch?v=..." style="width: 100%; font-size: 0.75rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem; margin-bottom: 0.5rem; color: white;">
+                            <button id="btn-thumbnail-lookalike" class="btn-secondary" style="font-size: 0.7rem; width: 100%; border: 1px solid #8b5cf6; color: #8b5cf6; background: transparent;">Find Similar Thumbnails</button>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 2: Audience Filter -->
+                        <div class="node">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header">Audience <span>2</span></div>
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="number" id="filter-min-subs" placeholder="Min Subs" style="font-size: 0.75rem;">
+                                    <input type="number" id="filter-max-subs" placeholder="Max Subs" style="font-size: 0.75rem;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 3: Activity Filter -->
+                        <div class="node">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-dot dot-out"></div>
+                            <div class="node-header">Recency <span>3</span></div>
+                            <div style="padding-top: 0.25rem;">
+                                <select id="filter-recency" style="font-size: 0.8rem;">
+                                    <option value="any">Any Time</option>
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="30">Last 30 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 4: Output -->
+                        <div class="node" style="background: rgba(99, 102, 241, 0.05); border-color: var(--accent-solid); border-width: 2px;">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-header" style="color: var(--accent-solid); font-weight: 800;">Agency Output <span>🏁</span></div>
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <button id="btn-search" style="width: 100%; padding: 0.75rem; font-size: 1rem; position: relative; z-index: 9999; pointer-events: all !important;">Run Massive Flow</button>
+                                <button id="btn-stop" class="btn-secondary" style="width: 100%; display: none; background: var(--danger);">Stop Flow</button>
+                                <button id="btn-export-csv" class="btn-secondary" style="width: 100%; font-size: 0.75rem; border: 1px solid var(--border);">Download CSV</button>
+                                
+                                <div class="hyper-drive-control" style="margin-top: 0.5rem; padding: 1rem; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="deep-discovery-mode">
+                                        <span class="slider"></span>
+                                        <span style="font-size: 0.75rem; color: var(--text-main); font-weight: 700;">Deep Discovery (Broad)</span>
+                                    </label>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="hyper-drive-mode" checked>
+                                        <span class="slider"></span>
+                                        <span style="font-size: 0.75rem; color: var(--text-main); font-weight: 700;">Hyper-Drive (Auto-Email)</span>
+                                    </label>
+                                    <label class="toggle-switch" style="margin-top: 0.5rem;">
+                                        <input type="checkbox" id="ai-icebreaker-mode">
+                                        <span class="slider"></span>
+                                        <span style="font-size: 0.75rem; color: var(--text-main); font-weight: 700;">AI Auto-Personalizer ✍️</span>
+                                    </label>
+                                    <label class="toggle-switch" style="margin-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.5rem;">
+                                        <input type="checkbox" id="universe-mode" checked>
+                                        <span class="slider"></span>
+                                        <span style="font-size: 0.75rem; color: #fbbf24; font-weight: 800;">🌌 Universe Mode (Infinite Slicing)</span>
+                                    </label>
+                                </div>
+                                
+                                <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-dim); padding: 0 0.25rem;">
+                                    <input type="checkbox" id="autopilot-mode" style="width: auto; height: auto;" checked> Auto-Pilot Mode
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0 0.25rem;">
+                                    <label style="font-size: 0.75rem; color: var(--text-dim);">Max Pages/Crawl:</label>
+                                    <input type="number" id="max-pages" value="20" style="width: 60px; font-size: 0.75rem; padding: 0.2rem;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <!-- Node 5: Bulk Import Integration -->
+                        <div class="node" style="border-style: dashed; opacity: 0.8;">
+                            <div class="node-dot dot-in"></div>
+                            <div class="node-header">Bulk Hydrate <span>🚰</span></div>
+                            <textarea id="bulk-import-main" placeholder="Paste shadow links here..." style="width: 100%; height: 60px; font-size: 0.7rem; background: rgba(0,0,0,0.2);"></textarea>
+                            <button id="btn-bulk-import-main" class="btn-secondary" style="width: 100%; font-size: 0.7rem; margin-top: 0.4rem;">Hydrate Shadow Leads</button>
+                        </div>
+
+                    </div>
+                </section>
+
+
+
+                <div id="live-intelligence-container" style="display: none; margin-bottom: 2rem;">
+                    <div class="feed-header">
+                        <h3>Live Intelligence Feed</h3>
+                        <div class="feed-stats">
+                            <span id="stat-scanned">0 Scanned</span> • 
+                            <span id="stat-emails" style="color: #10b981;">0 Emails Found</span>
+                        </div>
+                    </div>
+                    <div id="live-feed" class="terminal-log">
+                        <div class="log-entry system">System initialized. Waiting for flow start...</div>
+                    </div>
+                </div>
+
+                <div class="results-grid" id="search-results">
+                    <!-- Results will be injected here -->
+                    <div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-dim);">
+                        Enter a keyword to start searching for potential clients.
+                    </div>
+                </div>
+
+                <div id="load-more-container" style="display: none; text-align: center; margin-top: 3rem;">
+                    <button id="btn-load-more" class="btn-secondary" style="width: auto; padding: 1rem 3rem;">Load More Channels</button>
+                </div>
+
+            </div>
+
+            <!-- Leads View (Hidden by default) -->
+            <div id="view-leads" style="display: none;">
+                <header>
+                    <h1>My Lead CRM</h1>
+                    <p class="subtitle">Manage and track your outreach progress.</p>
+                </header>
+                <div class="results-grid" id="saved-leads">
+                    <!-- Saved leads will be injected here -->
+                </div>
+            </div>
+
+            <!-- History View (Hidden by default) -->
+            <div id="view-history" style="display: none;">
+                <header style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h1>Search History</h1>
+                        <p class="subtitle">Resume past discovery flows to save API quota.</p>
+                    </div>
+                    <button id="btn-clear-history" class="btn-secondary" style="font-size: 0.8rem; border-color: var(--danger); color: var(--danger); width: auto; padding: 0.5rem 1.5rem;">Clear All History</button>
+                </header>
+                <div id="history-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- History items will be injected here -->
+                    <div style="text-align: center; padding: 4rem; color: var(--text-dim);">
+                        No search history found yet.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View (Hidden by default) -->
+            <div id="view-settings" style="display: none;">
+                <header>
+                    <h1>API Configuration</h1>
+                    <p class="subtitle">Required to fetch real-time data from YouTube.</p>
+                </header>
+                <div class="search-container" style="flex-direction: column; align-items: flex-start; gap: 1.5rem;">
+                    <div style="width: 100%;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">YouTube API Key Vault (Multi-Key Rotation)</label>
+                        <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">Enter multiple API keys (one per line) to automatically rotate when quota is exhausted.</p>
+                        <textarea id="api-keys-input" style="width: 100%; height: 120px; background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; font-family: monospace;" placeholder="Paste API keys here (one per line)..."></textarea>
+                        <div id="vault-status-display" style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--accent-solid); font-weight: 600;">Status: Loading Vault...</div>
+                    </div>
+                    <button id="btn-save-settings">Save Key Vault</button>
+                    
+                    <div style="width: 100%; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Bulk Channel Import</label>
+                        <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">Paste YouTube Channel URLs or IDs to hydrate them (stats + emails).</p>
+                        <textarea id="bulk-import-input" style="width: 100%; height: 80px; background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem;" placeholder="Paste IDs/URLs here..."></textarea>
+                        <button id="btn-bulk-import" class="btn-secondary" style="margin-top: 0.5rem;">Hydrate & Extract</button>
+                    </div>
+
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">AI API Key Vault (Gemini)</label>
+                        <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">Required for Niche Nuke, Lookalike Engine, and Auto-Personalizer. Paste multiple keys (one per line) for rotation. <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-solid);">Get free key</a></p>
+                        <textarea id="gemini-api-key" style="width: 100%; height: 80px; background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; font-family: monospace;" placeholder="Paste Gemini API keys here (one per line)..."></textarea>
+                        <button id="btn-save-ai" class="btn-secondary" style="margin-top: 0.5rem;">Save AI Key Vault</button>
+                    
+                    <div style="width: 100%; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">System Controls</label>
+                        <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem;">Manage the internal lead discovery state.</p>
+                        <button id="btn-clear-global-seen" class="btn-secondary" style="color: var(--danger); border-color: var(--danger);">Reset Discovery Cache</button>
+                        <p style="font-size: 0.65rem; color: var(--text-dim); margin-top: 0.5rem;">Use this if "Run Massive Flow" isn't showing channels you've seen before.</p>
+                    </div>
+
+                    <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 12px; border: 1px dashed var(--accent-solid); width: 100%;">
+                        <h4 style="margin-bottom: 0.5rem; color: var(--accent-solid);">🚀 How to Scale to Unlimited?</h4>
+                        <ol style="padding-left: 1.25rem; font-size: 0.9rem; color: var(--text-dim); display: flex; flex-direction: column; gap: 0.5rem;">
+                            <li>Create multiple projects in <a href="https://console.cloud.google.com/" target="_blank" style="color: var(--accent-solid);">Google Cloud Console</a>.</li>
+                            <li>Each project gives you 10,000 units/day. 5 projects = 50,000 units.</li>
+                            <li>Paste all keys in the Vault above.</li>
+                            <li>Use <strong>External Recon</strong> in the search view to find channels via Google (Quota-Free discovery).</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        window.onerror = (msg, url, line) => {
+            alert(`LEADTUBE STARTUP ERROR: ${msg} at line ${line}\nPlease try clearing your browser cache.`);
+            return false;
+        };
+    </script>
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

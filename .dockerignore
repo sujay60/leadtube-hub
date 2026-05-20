@@ -1,0 +1,7 @@
+node_modules
+Bulk Email/node_modules
+*.db
+.env
+Bulk Email/.env
+.git
+*.md
