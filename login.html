@@ -350,8 +350,8 @@
 
             <button type="submit" class="btn-submit" id="btn-submit">Sign In</button>
 
-            <!-- Google Sign-In Integration -->
-            <div id="google-auth-container">
+            <!-- Google Sign-In Integration (hidden by default, shown only when OAuth is configured) -->
+            <div id="google-auth-container" style="display: none;">
                 <div style="display: flex; align-items: center; margin: 1.25rem 0; color: var(--text-dim); font-size: 0.75rem;">
                     <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.06);"></div>
                     <span style="padding: 0 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">or</span>
@@ -378,55 +378,41 @@
     <script>
         let currentMode = 'login';
 
-        // Check if Google Sign-In is configured on page load
-        async function checkGoogleConfig() {
+        // Show URL query errors and clean them from the URL
+        function handleUrlErrors() {
+            const params = new URLSearchParams(window.location.search);
+            const error = params.get('error');
+            if (error === 'google_not_configured') {
+                document.getElementById('error-msg').textContent = 'Google Sign-In is not configured. Please use username/password login.';
+            } else if (error === 'auth_failed') {
+                document.getElementById('error-msg').textContent = 'Google Authentication failed. Please try again.';
+            } else if (error === 'no_code') {
+                document.getElementById('error-msg').textContent = 'Google login was cancelled. Please try again.';
+            }
+            // Clear the error from URL so it doesn't persist on refresh
+            if (error) {
+                window.history.replaceState({}, '', '/login.html');
+            }
+        }
+
+        // Check if Google OAuth is configured on the server
+        async function checkGoogleAvailability() {
             try {
-                const res = await fetch('/hub/me');
-                if (res.status === 401) {
+                const res = await fetch('/auth/mode');
+                if (res.ok) {
                     const data = await res.json();
-                    if (data.google_configured) {
+                    if (data.oauth_configured) {
                         document.getElementById('google-auth-container').style.display = 'block';
                     }
                 }
             } catch (e) {
-                // If checking fails, let's try calling another quick endpoint or assume true if variables are there
-                // We'll fallback to showing Google if query has google error
-                const params = new URLSearchParams(window.location.search);
-                if (params.get('error') === 'google_not_configured') {
-                    document.getElementById('error-msg').textContent = 'Google Sign-In is not configured in environment variables.';
-                } else if (params.get('error') === 'auth_failed') {
-                    document.getElementById('error-msg').textContent = 'Google Authentication failed. Please try again.';
-                }
+                // Google button stays hidden if we can't check
             }
         }
-        
-        // Check checkGoogleConfig status via check endpoint
-        async function checkStatus() {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('error') === 'google_not_configured') {
-                document.getElementById('error-msg').textContent = 'Google Sign-In is not configured in environment variables.';
-            } else if (params.get('error') === 'auth_failed') {
-                document.getElementById('error-msg').textContent = 'Google Authentication failed. Please try again.';
-            }
 
-            try {
-                const res = await fetch('/hub/me');
-                // The /hub/me route returns google_configured flag if authenticated, but if not authenticated, does it still return?
-                // Wait, in hub-auth.js, router.get('/me') returns 401 if not authenticated.
-                // Ah, let's modify the /hub/me route or make a simple check mode endpoint!
-                // Yes, /hub/me has google_configured flag but it's protected.
-                // Let's create an unprotected endpoint or check `/auth/mode` which already exists in Bulk Email!
-                // Wait, `/auth/mode` in Bulk Email checks isOAuthConfigured().
-                const modeRes = await fetch('/auth/mode');
-                if (modeRes.ok) {
-                    const modeData = await modeRes.json();
-                    if (modeData.oauth_configured) {
-                        document.getElementById('google-auth-container').style.display = 'block';
-                    }
-                }
-            } catch (e) {}
-        }
-        checkStatus();
+        // Initialize on page load
+        handleUrlErrors();
+        checkGoogleAvailability();
 
         function handleGoogleLogin() {
             window.location.href = '/hub/auth/google';
