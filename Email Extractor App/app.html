@@ -21,6 +21,9 @@
                     <li class="nav-item active" id="nav-dashboard">
                         <span>⚡</span> Auto-Scraper
                     </li>
+                    <li class="nav-item" id="nav-history">
+                        <span>📂</span> History
+                    </li>
                     <li class="nav-item" id="nav-settings">
                         <span>⚙️</span> Bot Settings
                     </li>
@@ -154,6 +157,19 @@
                     </div>
                     
                     <button id="btn-save-settings" style="margin-top: 1rem;">Save Configuration</button>
+                </div>
+            </div>
+
+            <!-- History View (Hidden by default) -->
+            <div id="view-history" style="display: none;">
+                <header>
+                    <h1>Extraction History</h1>
+                    <p class="subtitle">Access, resume, and download your previous extraction sessions.</p>
+                </header>
+                
+                <div id="history-container">
+                    <!-- Grid of history items or empty state -->
+                    <div id="history-grid" class="history-grid"></div>
                 </div>
             </div>
 

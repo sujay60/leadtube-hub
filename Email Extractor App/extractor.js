@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let globalCache = {};
     let activeWorkers = 0;
+    let currentSessionId = null;
+    let currentFilename = "";
 
     // --- DOM Elements ---
     const uploadZone = document.getElementById('upload-zone');
@@ -39,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     const views = {
         dashboard: document.getElementById('view-dashboard'),
-        settings: document.getElementById('view-settings')
+        settings: document.getElementById('view-settings'),
+        history: document.getElementById('view-history')
     };
 
     // --- Initialization ---
@@ -77,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const viewId = item.id.replace('nav-', '');
             Object.values(views).forEach(v => v.style.display = 'none');
             if(views[viewId]) views[viewId].style.display = 'block';
+            if (viewId === 'history') renderHistory();
         });
     });
 
@@ -164,6 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 currentIndex = 0;
+                currentSessionId = 'session_' + Date.now();
+                currentFilename = file.name;
+                saveSessionToHistory();
+
                 uploadZone.style.display = 'none';
                 queueContainer.style.display = 'block';
                 btnExport.style.display = 'block';
@@ -244,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (item && (item.status === 'pending' || item.status === 'scraping')) {
             const wasScraping = item.status === 'scraping';
             item.status = 'skipped';
+            saveSessionToHistory();
             renderQueue();
             console.log(`Skipped channel ID ${id}`);
             
@@ -331,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentItem = queue[nextIndex];
             currentItem.status = 'scraping';
             activeWorkers++;
+            saveSessionToHistory();
             renderQueue();
 
             // Extract Channel ID from link to use as Cache Key
@@ -412,6 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        saveSessionToHistory();
         renderQueue();
         activeWorkers--;
         
@@ -448,6 +459,225 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
         document.body.removeChild(link);
     });
+
+    // --- History Management Logic ---
+    function saveSessionToHistory() {
+        if (!currentSessionId) return;
+        let history = [];
+        try {
+            history = JSON.parse(localStorage.getItem('extractor_history')) || [];
+        } catch (e) {
+            history = [];
+        }
+        
+        const existingIndex = history.findIndex(s => s.id === currentSessionId);
+        const sessionData = {
+            id: currentSessionId,
+            filename: currentFilename,
+            timestamp: existingIndex >= 0 ? history[existingIndex].timestamp : new Date().toISOString(),
+            queue: queue,
+            currentIndex: currentIndex
+        };
+        
+        if (existingIndex >= 0) {
+            history[existingIndex] = sessionData;
+        } else {
+            history.unshift(sessionData); // Newest first
+        }
+        
+        localStorage.setItem('extractor_history', JSON.stringify(history));
+    }
+
+    function renderHistory() {
+        const grid = document.getElementById('history-grid');
+        if (!grid) return;
+        
+        let history = [];
+        try {
+            history = JSON.parse(localStorage.getItem('extractor_history')) || [];
+        } catch (e) {
+            history = [];
+        }
+        
+        if (history.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📂</div>
+                    <h3>No Extraction History</h3>
+                    <p>Upload a CSV file and run the scraper to save session logs here.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        grid.innerHTML = '';
+        history.forEach(session => {
+            const dateStr = new Date(session.timestamp).toLocaleString();
+            
+            // Calculate stats
+            const totalCount = session.queue.length;
+            const completedCount = session.queue.filter(q => q.status === 'done' || q.status === 'failed' || q.status === 'skipped').length;
+            const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+            
+            let emailsCount = 0;
+            let socialsCount = 0;
+            session.queue.forEach(q => {
+                if (q.emailsFound && q.emailsFound !== 'None') emailsCount++;
+                if (q.socialsFound) socialsCount++;
+            });
+            
+            const card = document.createElement('div');
+            card.className = 'history-card';
+            card.innerHTML = `
+                <div class="history-card-header">
+                    <div class="history-file-info">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name" title="${session.filename}">${session.filename}</span>
+                    </div>
+                    <span class="history-date">${dateStr}</span>
+                </div>
+                
+                <div class="history-progress-section">
+                    <div class="progress-info">
+                        <span>Progress</span>
+                        <span>${completedCount} / ${totalCount} (${progressPercent}%)</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" style="width: ${progressPercent}%"></div>
+                    </div>
+                </div>
+                
+                <div class="history-stats">
+                    <div class="history-stat">
+                        <span class="stat-icon" style="color: #10b981;">📧</span>
+                        <span>${emailsCount} Emails</span>
+                    </div>
+                    <div class="history-stat">
+                        <span class="stat-icon" style="color: #8b5cf6;">🔗</span>
+                        <span>${socialsCount} Socials</span>
+                    </div>
+                </div>
+                
+                <div class="history-actions">
+                    <button class="btn-primary btn-resume-session" data-id="${session.id}">⚡ Continue</button>
+                    <button class="btn-secondary btn-download-session" data-id="${session.id}">📥 Download</button>
+                    <button class="btn-delete-session" data-id="${session.id}">🗑️</button>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+        
+        // Wire up buttons
+        grid.querySelectorAll('.btn-resume-session').forEach(btn => {
+            btn.onclick = () => {
+                const sessionId = btn.dataset.id;
+                const session = history.find(s => s.id === sessionId);
+                if (session) {
+                    loadSession(session);
+                }
+            };
+        });
+        
+        grid.querySelectorAll('.btn-download-session').forEach(btn => {
+            btn.onclick = () => {
+                const sessionId = btn.dataset.id;
+                const session = history.find(s => s.id === sessionId);
+                if (session) {
+                    downloadSessionCSV(session);
+                }
+            };
+        });
+        
+        grid.querySelectorAll('.btn-delete-session').forEach(btn => {
+            btn.onclick = () => {
+                const sessionId = btn.dataset.id;
+                if (confirm('Are you sure you want to delete this extraction session?')) {
+                    deleteSession(sessionId);
+                }
+            };
+        });
+    }
+
+    function loadSession(session) {
+        queue = session.queue;
+        currentIndex = session.currentIndex;
+        currentSessionId = session.id;
+        currentFilename = session.filename;
+        
+        // Update stats top counters
+        uploadZone.style.display = 'none';
+        queueContainer.style.display = 'block';
+        btnExport.style.display = 'block';
+        statTotal.textContent = queue.length;
+        
+        // Reset scraping session limit
+        sessionScrapes = 0;
+        updateSessionStat();
+        
+        renderQueue();
+        checkStartButton();
+        
+        // Switch to Dashboard
+        navItems.forEach(i => i.classList.remove('active'));
+        document.getElementById('nav-dashboard').classList.add('active');
+        Object.values(views).forEach(v => v.style.display = 'none');
+        views.dashboard.style.display = 'block';
+    }
+
+    function downloadSessionCSV(session) {
+        if (!session.queue || session.queue.length === 0) return;
+        
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link\n";
+        session.queue.forEach(row => {
+            const name = `"${(row.name || '').replace(/"/g, '""')}"`;
+            const subs = `"${(row.subs || '').replace(/"/g, '""')}"`;
+            const emails = `"${(row.emailsFound || '').replace(/"/g, '""')}"`;
+            const socials = `"${(row.socialsFound || '').replace(/"/g, '""')}"`;
+            const link = `"${(row.link || '').replace(/"/g, '""')}"`;
+            
+            csvContent += `${name},${subs},${emails},${socials},${link}\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        
+        // Sanitize filename
+        const cleanName = session.filename.replace(/\.csv$/i, '');
+        link.setAttribute("download", `extracted_leads_${cleanName}_${new Date(session.timestamp).getTime()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function deleteSession(sessionId) {
+        let history = [];
+        try {
+            history = JSON.parse(localStorage.getItem('extractor_history')) || [];
+        } catch (e) {
+            history = [];
+        }
+        
+        history = history.filter(s => s.id !== sessionId);
+        localStorage.setItem('extractor_history', JSON.stringify(history));
+        
+        if (currentSessionId === sessionId) {
+            // Reset active extraction workspace
+            currentSessionId = null;
+            currentFilename = "";
+            queue = [];
+            currentIndex = 0;
+            uploadZone.style.display = 'block';
+            queueContainer.style.display = 'none';
+            btnExport.style.display = 'none';
+            statTotal.textContent = '0';
+            
+            renderQueue();
+            checkStartButton();
+        }
+        
+        renderHistory();
+    }
 
     init();
 });
