@@ -9,7 +9,7 @@ function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    `${process.env.BASE_URL || 'http://localhost:3000'}/auth/google/callback`
+    `${process.env.BASE_URL || 'https://leadtube.onrender.com'}/auth/google/callback`
   );
 }
 
@@ -177,7 +177,7 @@ async function sendCampaignEmails(campaignId) {
   `).all(campaignId);
 
   const delay = campaign.delay_ms || 2000;
-  let baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  let baseUrl = process.env.BASE_URL || 'https://leadtube.onrender.com';
   if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
   activeCampaigns.set(campaignId, { paused: false, resolve: null });

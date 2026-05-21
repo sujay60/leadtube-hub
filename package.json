@@ -1,5 +1,5 @@
 {
-  "name": "leadtube-hub",
+  "name": "leadtube",
   "version": "1.0.0",
   "description": "LeadTube Hub — Unified Agency Suite with Channel Finder, Email Extractor, Screenshot Extractor & MailBlast",
   "main": "server.js",

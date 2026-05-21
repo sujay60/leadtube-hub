@@ -7,7 +7,7 @@ async function test() {
   const account = db.prepare('SELECT * FROM accounts WHERE refresh_token != "app_password"').get();
   if(!account) return console.log('no account');
 
-  const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'http://localhost:3000/auth/google/callback');
+  const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, 'https://leadtube.onrender.com/auth/google/callback');
   oauth2Client.setCredentials({
     access_token: account.access_token,
     refresh_token: account.refresh_token,

@@ -76,6 +76,34 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(checkBulkEmailServer, 5000);
     checkBulkEmailServer();
 
+    // ── Fetch logged-in user info ──
+    async function loadUserInfo() {
+        try {
+            const res = await fetch('/hub/me');
+            if (res.ok) {
+                const user = await res.json();
+                const usernameEl = document.getElementById('sidebar-username');
+                if (usernameEl) {
+                    usernameEl.textContent = user.username.charAt(0).toUpperCase() + user.username.slice(1);
+                }
+            }
+        } catch (err) {
+            console.warn('Could not load user info:', err);
+        }
+    }
+    loadUserInfo();
+
+    // ── Logout handler ──
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/hub/logout', { method: 'POST' });
+            } catch (e) {}
+            window.location.href = '/login.html';
+        });
+    }
+
     // ── Global Drag & Drop: Capture files at the parent level and forward to the active iframe ──
 
     // Prevent default on dragover so the browser allows the drop

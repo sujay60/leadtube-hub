@@ -26,6 +26,9 @@ const campaignRoutes = require('./Bulk Email/routes/campaigns');
 const trackingRoutes = require('./Bulk Email/routes/tracking');
 const inboxRoutes = require('./Bulk Email/routes/inbox');
 
+// ── Import Hub Auth ──
+const hubAuthRoutes = require('./hub-auth');
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -50,7 +53,7 @@ app.use(session({
 // ── Security: Block access to server-side source files ──
 app.use((req, res, next) => {
   const blocked = [
-    '/server.js', '/hub-server.js', '/package.json', '/package-lock.json',
+    '/server.js', '/hub-server.js', '/hub-auth.js', '/package.json', '/package-lock.json',
     '/Dockerfile', '/fly.toml', '/.env', '/.dockerignore', '/.gitignore',
     '/Bulk Email/server.js', '/Bulk Email/routes/', '/Bulk Email/services/',
     '/Bulk Email/database/', '/Bulk Email/node_modules/', '/Bulk Email/.env',
@@ -64,6 +67,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ── Hub Auth Routes (must be BEFORE the auth guard) ──
+app.use('/hub', hubAuthRoutes);
 
 // ── MailBlast API Routes ──
 app.use('/auth', authRoutes);
@@ -81,6 +87,27 @@ app.use('/api', (err, req, res, next) => {
 app.use('/auth', (err, req, res, next) => {
   console.error('Auth Error:', err.message);
   res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
+// ── Auth Guard: Protect all pages behind login ──
+app.use((req, res, next) => {
+  // Allow login page, hub auth API, tracking pixels, and Google OAuth callbacks
+  const publicPaths = ['/login.html', '/hub/', '/t/', '/auth/google', '/auth/google/callback'];
+  const decodedPath = decodeURIComponent(req.path);
+  if (publicPaths.some(p => decodedPath === p || decodedPath.startsWith(p))) {
+    return next();
+  }
+
+  // If user is not logged in, redirect to login
+  if (!req.session || !req.session.userId) {
+    // For API requests, return 401 JSON
+    if (decodedPath.startsWith('/api/') || decodedPath.startsWith('/auth/')) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    return res.redirect('/login.html');
+  }
+
+  next();
 });
 
 // ── MailBlast Static Files (CSS & JS for the Bulk Email frontend) ──
