@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return {
                         id: index,
                         name: row['Channel Name'] || 'Unknown',
+                        ownerName: row['Channel Owner'] || row['Owner Name'] || '',
                         subs: row['Subscribers'] || 'N/A',
                         link: row['Link'] || '',
                         status: 'pending', // pending, scraping, done, failed
@@ -212,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tr.innerHTML = `
                     <td>${statusHtml}</td>
                     <td style="font-weight: 600;">${item.name}</td>
+                    <td style="font-weight: 600; color: var(--text-dim);">${item.ownerName || '-'}</td>
                     <td>${item.subs}</td>
                     <td style="color: #10b981; font-weight: 600;">${item.emailsFound || '-'}</td>
                     <td style="color: #8b5cf6;">${item.socialsFound || '-'}</td>
@@ -354,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Resolve instantly
                 handleScrapeResult({
                     id: currentItem.id,
+                    ownerName: cachedData.ownerName || '',
                     emails: cachedData.emails,
                     socials: cachedData.socials,
                     usedCaptcha: false, // Cached, so no limits used
@@ -372,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'APP_COMMAND_SCRAPE',
                 payload: {
                     id: currentItem.id,
+                    name: currentItem.name,
                     url: currentItem.link,
                     cacheKey: channelId,
                     delayMs: actualDelay
@@ -381,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleScrapeResult(payload) {
-        const { id, emails, socials, usedCaptcha, error } = payload;
+        const { id, emails, socials, ownerName, usedCaptcha, error } = payload;
         
         const item = queue.find(q => q.id === id);
         if (!item) return;
@@ -393,6 +397,10 @@ document.addEventListener('DOMContentLoaded', () => {
             item.status = 'failed';
         } else {
             item.status = 'done';
+            
+            if (ownerName) {
+                item.ownerName = ownerName;
+            }
             
             // Append new emails if existing ones are there, else replace
             if (emails && emails.length > 0) {
@@ -407,9 +415,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Save to Global Cache
-            if (item.emailsFound && item.emailsFound !== 'None' || item.socialsFound) {
+            if (item.emailsFound && item.emailsFound !== 'None' || item.socialsFound || item.ownerName) {
                 let channelId = item.link.split('/channel/')[1] || item.link;
                 globalCache[channelId] = {
+                    ownerName: item.ownerName || '',
                     emails: item.emailsFound ? item.emailsFound.split(', ') : [],
                     socials: socials || []
                 };
@@ -440,15 +449,16 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExport.addEventListener('click', () => {
         if (queue.length === 0) return;
         
-        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link\n";
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Channel Owner,Subscribers,Emails,Social Links,Link\n";
         queue.forEach(row => {
             const name = `"${(row.name || '').replace(/"/g, '""')}"`;
+            const owner = `"${(row.ownerName || '').replace(/"/g, '""')}"`;
             const subs = `"${(row.subs || '').replace(/"/g, '""')}"`;
             const emails = `"${(row.emailsFound || '').replace(/"/g, '""')}"`;
             const socials = `"${(row.socialsFound || '').replace(/"/g, '""')}"`;
             const link = `"${(row.link || '').replace(/"/g, '""')}"`;
             
-            csvContent += `${name},${subs},${emails},${socials},${link}\n`;
+            csvContent += `${name},${owner},${subs},${emails},${socials},${link}\n`;
         });
 
         const encodedUri = encodeURI(csvContent);
@@ -627,15 +637,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function downloadSessionCSV(session) {
         if (!session.queue || session.queue.length === 0) return;
         
-        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link\n";
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Channel Owner,Subscribers,Emails,Social Links,Link\n";
         session.queue.forEach(row => {
             const name = `"${(row.name || '').replace(/"/g, '""')}"`;
+            const owner = `"${(row.ownerName || '').replace(/"/g, '""')}"`;
             const subs = `"${(row.subs || '').replace(/"/g, '""')}"`;
             const emails = `"${(row.emailsFound || '').replace(/"/g, '""')}"`;
             const socials = `"${(row.socialsFound || '').replace(/"/g, '""')}"`;
             const link = `"${(row.link || '').replace(/"/g, '""')}"`;
             
-            csvContent += `${name},${subs},${emails},${socials},${link}\n`;
+            csvContent += `${name},${owner},${subs},${emails},${socials},${link}\n`;
         });
 
         const encodedUri = encodeURI(csvContent);
