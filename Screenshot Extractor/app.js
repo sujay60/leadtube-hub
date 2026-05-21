@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         apiSettings.style.display = apiSettings.style.display === 'none' ? 'block' : 'none';
     });
 
-    saveKeyBtn.addEventListener('click', () => {
+    saveKeyBtn.addEventListener('click', async () => {
         const raw = apiKeyInput.value.trim();
         if (!raw || raw.includes('...')) {
             alert('Please paste a valid Gemini API key.');
@@ -113,12 +113,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // Replace all keys
         localStorage.setItem('gemini_api_keys', JSON.stringify(keys));
+        
+        // Sync to server DB
+        try {
+            await fetch('/hub/api_keys', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(keys)
+            });
+        } catch (e) {
+            console.error('Failed to save api keys to DB:', e);
+        }
+
         updateEngineBadge();
         apiSettings.style.display = 'none';
     });
 
-    // Init badge
-    updateEngineBadge();
+    // Init keys from server DB
+    async function initKeys() {
+        try {
+            const res = await fetch('/hub/api_keys');
+            if (res.ok) {
+                const keys = await res.json();
+                if (keys && keys.length > 0) {
+                    localStorage.setItem('gemini_api_keys', JSON.stringify(keys));
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load api keys from DB:', e);
+        }
+        updateEngineBadge();
+    }
+    initKeys();
 
     // ── Gemini Vision API ──
     async function processWithGemini(file) {
@@ -583,25 +609,39 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         });
     });
 
-    // ═══════ HISTORY SYSTEM (localStorage) ═══════
+    // ── HISTORY SYSTEM (DB synced) ──
     const HISTORY_KEY = 'screenshot_extractor_history';
+    let localHistory = [];
+
+    async function loadHistoryFromServer() {
+        try {
+            const res = await fetch('/hub/screenshot/history');
+            if (res.ok) {
+                localHistory = await res.json();
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(localHistory));
+            }
+        } catch (e) {
+            console.error('Failed to load history from server, using localStorage:', e);
+            try {
+                localHistory = JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+            } catch (err) {
+                localHistory = [];
+            }
+        }
+        updateHistoryBadge();
+    }
+    loadHistoryFromServer();
 
     function getHistory() {
-        try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
-        catch { return []; }
-    }
-
-    function saveHistory(sessions) {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(sessions));
-        updateHistoryBadge();
+        return localHistory;
     }
 
     function updateHistoryBadge() {
-        const count = getHistory().length;
+        const count = localHistory.length;
         historyCountBadge.textContent = count;
     }
 
-    function saveCurrentSession() {
+    async function saveCurrentSession() {
         if (extractedData.length === 0) { alert('No leads to save.'); return; }
         const session = {
             id: Date.now(),
@@ -610,15 +650,29 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
             engine: hasGeminiKey() ? 'Gemini Vision' : 'OCR',
             leads: JSON.parse(JSON.stringify(extractedData))
         };
-        const history = getHistory();
-        history.unshift(session);
-        saveHistory(history);
+        
+        localHistory.unshift(session);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(localHistory));
+        updateHistoryBadge();
+        
+        // Sync to server DB
+        try {
+            await fetch('/hub/screenshot/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(session)
+            });
+        } catch (e) {
+            console.error('Failed to sync saved session to server:', e);
+        }
+
         alert(`✅ Session saved! (${session.leadCount} leads)`);
     }
 
     saveSessionBtn.addEventListener('click', saveCurrentSession);
 
-    function renderHistoryList() {
+    async function renderHistoryList() {
+        await loadHistoryFromServer();
         const history = getHistory();
         historyDetail.style.display = 'none';
         if (history.length === 0) {
@@ -653,11 +707,22 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
             });
         });
         historyList.querySelectorAll('.history-delete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (!confirm('Delete this session?')) return;
-                const history = getHistory().filter(s => s.id !== Number(btn.dataset.del));
-                saveHistory(history);
+                const sessionId = Number(btn.dataset.del);
+                
+                localHistory = localHistory.filter(s => s.id !== sessionId);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(localHistory));
+                updateHistoryBadge();
+
+                // Sync delete to server DB
+                try {
+                    await fetch(`/hub/screenshot/history/${sessionId}`, { method: 'DELETE' });
+                } catch (err) {
+                    console.error('Failed to delete session on server:', err);
+                }
+
                 renderHistoryList();
             });
         });
@@ -700,9 +765,20 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         document.querySelector('.tab-btn[data-tab="extract"]').click();
     });
 
-    clearHistoryBtn.addEventListener('click', () => {
+    clearHistoryBtn.addEventListener('click', async () => {
         if (!confirm('Delete ALL saved sessions? This cannot be undone.')) return;
-        saveHistory([]);
+        
+        localHistory = [];
+        localStorage.setItem(HISTORY_KEY, JSON.stringify([]));
+        updateHistoryBadge();
+
+        // Sync clear to server DB
+        try {
+            await fetch('/hub/screenshot/history', { method: 'DELETE' });
+        } catch (err) {
+            console.error('Failed to clear history on server:', err);
+        }
+
         renderHistoryList();
     });
 

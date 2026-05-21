@@ -16,6 +16,43 @@ document.addEventListener('DOMContentLoaded', () => {
         globalSeenIds = new Set(storedSeen);
     } catch(e) { console.error('Corrupted global seen data'); }
 
+    // ── Async DB sync on startup ──
+    async function syncStateFromDB() {
+        try {
+            const [leadsRes, histRes, seenRes] = await Promise.all([
+                fetch('/hub/cf/leads'),
+                fetch('/hub/cf/search_history'),
+                fetch('/hub/cf/global_seen')
+            ]);
+            if (leadsRes.ok) {
+                const dbLeads = await leadsRes.json();
+                if (dbLeads && dbLeads.length > 0) {
+                    savedLeads = dbLeads;
+                    localStorage.setItem('saved_leads', JSON.stringify(savedLeads));
+                }
+            }
+            if (histRes.ok) {
+                const dbHist = await histRes.json();
+                if (dbHist && dbHist.length > 0) {
+                    searchHistory = dbHist;
+                    localStorage.setItem('search_history', JSON.stringify(searchHistory));
+                }
+            }
+            if (seenRes.ok) {
+                const dbSeen = await seenRes.json();
+                if (dbSeen && dbSeen.length > 0) {
+                    globalSeenIds = new Set(dbSeen);
+                    localStorage.setItem('global_seen_ids', JSON.stringify(dbSeen));
+                }
+            }
+            renderLeads();
+            renderHistory();
+        } catch (e) {
+            console.error('Failed to sync state from server DB:', e);
+        }
+    }
+    syncStateFromDB();
+
     let currentNextPageToken = '';
     let currentHistoryId = null;
     let seenChannelIds = new Set();
@@ -122,10 +159,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnGenerateGoogle) btnGenerateGoogle.addEventListener('click', () => generateGoogleLinks());
         if (btnBulkImport) btnBulkImport.addEventListener('click', () => bulkImportLeads(bulkImportInput.value));
         if (btnBulkImportMain) btnBulkImportMain.addEventListener('click', () => bulkImportLeads(bulkImportMain.value));
-        if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => {
+        if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', async () => {
             if (confirm('Are you sure you want to delete all search history? This will also delete the cached results.')) {
                 searchHistory = [];
                 saveHistory();
+                try { await fetch('/hub/cf/search_history', { method: 'DELETE' }); } catch(e) { console.error('DB clear history failed:', e); }
             }
         });
         
@@ -134,10 +172,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnSaveAi) btnSaveAi.addEventListener('click', () => saveAiVault());
 
         const btnClearGlobalSeen = document.getElementById('btn-clear-global-seen');
-        if (btnClearGlobalSeen) btnClearGlobalSeen.addEventListener('click', () => {
+        if (btnClearGlobalSeen) btnClearGlobalSeen.addEventListener('click', async () => {
             if (confirm('Are you sure you want to clear the Discovery Cache? This will allow previously found channels to show up again in new searches.')) {
                 globalSeenIds.clear();
                 localStorage.removeItem('global_seen_ids');
+                try { await fetch('/hub/cf/global_seen', { method: 'DELETE' }); } catch(e) { console.error('DB clear seen failed:', e); }
                 alert('Discovery Cache cleared!');
             }
         });
@@ -771,6 +810,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isHistory) {
                 globalSeenIds.add(channelId);
                 localStorage.setItem('global_seen_ids', JSON.stringify([...globalSeenIds]));
+                // Debounced sync to server (only save every 5 seconds max)
+                if (!window._seenSyncTimer) {
+                    window._seenSyncTimer = setTimeout(() => {
+                        fetch('/hub/cf/global_seen', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify([...globalSeenIds])
+                        }).catch(e => console.error('Failed to sync global_seen:', e));
+                        window._seenSyncTimer = null;
+                    }, 5000);
+                }
             }
 
             const card = document.createElement('div');
@@ -852,9 +902,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveLead(id, name) {
         if (savedLeads.find(l => l.id === id)) return;
-        savedLeads.push({ id, name, status: 'potential', date: new Date().toLocaleDateString() });
+        const lead = { id, name, status: 'potential', date: new Date().toLocaleDateString() };
+        savedLeads.push(lead);
         localStorage.setItem('saved_leads', JSON.stringify(savedLeads));
         renderLeads();
+        fetch('/hub/cf/leads', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(lead)
+        }).catch(e => console.error('Failed to sync lead to DB:', e));
     }
 
     function renderLeads() {
@@ -883,6 +939,7 @@ document.addEventListener('DOMContentLoaded', () => {
         savedLeads = savedLeads.filter(l => l.id !== id);
         localStorage.setItem('saved_leads', JSON.stringify(savedLeads));
         renderLeads();
+        fetch(`/hub/cf/leads/${id}`, { method: 'DELETE' }).catch(e => console.error('Failed to delete lead from DB:', e));
     };
 
     // 3D Tilt and Parallax Effect
@@ -978,6 +1035,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveHistory() {
         localStorage.setItem('search_history', JSON.stringify(searchHistory));
         renderHistory();
+        // Sync all history entries to server DB
+        searchHistory.forEach(item => {
+            fetch('/hub/cf/search_history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            }).catch(e => console.error('Failed to sync history to DB:', e));
+        });
     }
 
     function renderHistory() {
@@ -1060,9 +1125,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 300);
             };
 
-            div.querySelector('.btn-delete-history').onclick = () => {
+            div.querySelector('.btn-delete-history').onclick = async () => {
                 searchHistory = searchHistory.filter(h => h.id !== item.id);
-                saveHistory();
+                localStorage.setItem('search_history', JSON.stringify(searchHistory));
+                renderHistory();
+                try { await fetch(`/hub/cf/search_history/${item.id}`, { method: 'DELETE' }); } catch(e) { console.error('DB delete history failed:', e); }
             };
 
             historyList.appendChild(div);

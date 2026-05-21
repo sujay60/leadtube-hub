@@ -216,6 +216,76 @@ async function initDatabase() {
       password_hash TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS hub_extractor_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      session_id TEXT NOT NULL,
+      filename TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      queue_data TEXT,
+      current_index INTEGER,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, session_id)
+    );
+    CREATE TABLE IF NOT EXISTS hub_extractor_cache (
+      user_id INTEGER PRIMARY KEY,
+      cache_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_extractor_settings (
+      user_id INTEGER PRIMARY KEY,
+      settings_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_screenshot_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      session_id INTEGER NOT NULL,
+      date_val DATETIME DEFAULT CURRENT_TIMESTAMP,
+      lead_count INTEGER,
+      engine TEXT,
+      leads_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, session_id)
+    );
+    CREATE TABLE IF NOT EXISTS hub_api_keys (
+      user_id INTEGER PRIMARY KEY,
+      keys_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_cf_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      channel_id TEXT NOT NULL,
+      name TEXT,
+      status TEXT,
+      date_val TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, channel_id)
+    );
+    CREATE TABLE IF NOT EXISTS hub_cf_search_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      campaign_id INTEGER NOT NULL,
+      query TEXT,
+      country TEXT,
+      token TEXT,
+      found_count INTEGER,
+      results_data TEXT,
+      timestamp TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, campaign_id)
+    );
+    CREATE TABLE IF NOT EXISTS hub_cf_global_seen (
+      user_id INTEGER PRIMARY KEY,
+      seen_ids TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_cf_yt_keys (
+      user_id INTEGER PRIMARY KEY,
+      keys_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrations — add new columns if they don't exist

@@ -16,6 +16,11 @@ class YouTubeAPI {
         this.apiKeys = keys.filter(k => k.trim());
         this.currentKeyIndex = 0;
         localStorage.setItem('yt_api_keys', JSON.stringify(this.apiKeys));
+        fetch('/hub/cf/yt_keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.apiKeys)
+        }).catch(e => console.error('Failed to sync yt_keys to server:', e));
     }
 
     async fetch(endpoint, params = {}) {
@@ -144,6 +149,11 @@ class AIClient {
         }
         this.currentKeyIndex = 0;
         localStorage.setItem('gemini_api_keys', JSON.stringify(this.apiKeys));
+        fetch('/hub/api_keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.apiKeys)
+        }).catch(e => console.error('Failed to sync gemini_keys to server:', e));
     }
 
     rotateKey() {
@@ -270,3 +280,31 @@ class AIClient {
 
 window.ytApi = new YouTubeAPI();
 window.aiApi = new AIClient();
+
+// ── Auto-load keys from server DB on startup ──
+(async function initKeysFromDB() {
+    try {
+        const [ytRes, geminiRes] = await Promise.all([
+            fetch('/hub/cf/yt_keys'),
+            fetch('/hub/api_keys')
+        ]);
+        if (ytRes.ok) {
+            const ytKeys = await ytRes.json();
+            if (ytKeys && ytKeys.length > 0) {
+                window.ytApi.apiKeys = ytKeys;
+                window.ytApi.currentKeyIndex = 0;
+                localStorage.setItem('yt_api_keys', JSON.stringify(ytKeys));
+            }
+        }
+        if (geminiRes.ok) {
+            const geminiKeys = await geminiRes.json();
+            if (geminiKeys && geminiKeys.length > 0) {
+                window.aiApi.apiKeys = geminiKeys;
+                window.aiApi.currentKeyIndex = 0;
+                localStorage.setItem('gemini_api_keys', JSON.stringify(geminiKeys));
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load keys from server DB:', e);
+    }
+})();

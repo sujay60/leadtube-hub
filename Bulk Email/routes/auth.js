@@ -83,8 +83,11 @@ router.get('/google', (req, res) => {
 
 // OAuth2 callback
 router.get('/google/callback', async (req, res) => {
-  const { code } = req.query;
-  if (!code) return res.redirect('/#/accounts?error=no_code');
+  const { code, state } = req.query;
+  if (!code) {
+    if (state === 'hub_login') return res.redirect('/login.html?error=no_code');
+    return res.redirect('/#/accounts?error=no_code');
+  }
 
   try {
     const oauth2Client = getOAuth2Client();
@@ -93,6 +96,35 @@ router.get('/google/callback', async (req, res) => {
 
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const { data: profile } = await oauth2.userinfo.get();
+
+    // Check if this is a hub login request
+    if (state === 'hub_login') {
+      const db = getDb();
+      let user = db.prepare('SELECT id, username, email FROM hub_users WHERE email = ?').get(profile.email.toLowerCase());
+      
+      if (!user) {
+        let username = profile.email.split('@')[0].toLowerCase();
+        const existingUsername = db.prepare('SELECT id FROM hub_users WHERE username = ?').get(username);
+        if (existingUsername) {
+          username = username + Math.floor(Math.random() * 1000);
+        }
+        
+        const result = db.prepare(
+          'INSERT INTO hub_users (username, email, password_hash) VALUES (?, ?, ?)'
+        ).run(username, profile.email.toLowerCase(), 'google_oauth');
+        
+        user = {
+          id: result.lastInsertRowid,
+          username: username,
+          email: profile.email.toLowerCase()
+        };
+      }
+      
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      
+      return res.redirect('/');
+    }
 
     const db = getDb();
     const existing = db.prepare('SELECT id FROM accounts WHERE email = ?').get(profile.email);
@@ -111,6 +143,7 @@ router.get('/google/callback', async (req, res) => {
     res.redirect('/#/accounts?success=connected');
   } catch (error) {
     console.error('OAuth callback error:', error);
+    if (state === 'hub_login') return res.redirect('/login.html?error=auth_failed');
     res.redirect('/#/accounts?error=auth_failed');
   }
 });

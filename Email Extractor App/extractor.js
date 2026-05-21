@@ -46,22 +46,48 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Initialization ---
-    function init() {
+    async function init() {
         // Load Settings
-        const savedSettings = localStorage.getItem('extractor_settings');
-        if (savedSettings) {
-            limitSettings = JSON.parse(savedSettings);
-            if (!limitSettings.concurrency) limitSettings.concurrency = 1;
-            document.getElementById('setting-account-limit').value = limitSettings.accountLimit;
-            document.getElementById('setting-human-delay').value = limitSettings.humanDelay;
-            if (document.getElementById('setting-concurrency')) {
-                document.getElementById('setting-concurrency').value = limitSettings.concurrency;
+        try {
+            const settingsRes = await fetch('/hub/extractor/settings');
+            if (settingsRes.ok) {
+                const dbSettings = await settingsRes.json();
+                if (dbSettings) {
+                    limitSettings = dbSettings;
+                    if (!limitSettings.concurrency) limitSettings.concurrency = 1;
+                    document.getElementById('setting-account-limit').value = limitSettings.accountLimit;
+                    document.getElementById('setting-human-delay').value = limitSettings.humanDelay;
+                    if (document.getElementById('setting-concurrency')) {
+                        document.getElementById('setting-concurrency').value = limitSettings.concurrency;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load settings from server, falling back to localStorage:', e);
+            const savedSettings = localStorage.getItem('extractor_settings');
+            if (savedSettings) {
+                limitSettings = JSON.parse(savedSettings);
+                if (!limitSettings.concurrency) limitSettings.concurrency = 1;
+                document.getElementById('setting-account-limit').value = limitSettings.accountLimit;
+                document.getElementById('setting-human-delay').value = limitSettings.humanDelay;
+                if (document.getElementById('setting-concurrency')) {
+                    document.getElementById('setting-concurrency').value = limitSettings.concurrency;
+                }
             }
         }
         
+        // Load Cache
         try {
-            globalCache = JSON.parse(localStorage.getItem('extractor_cache')) || {};
-        } catch(e) { globalCache = {}; }
+            const cacheRes = await fetch('/hub/extractor/cache');
+            if (cacheRes.ok) {
+                globalCache = await cacheRes.json() || {};
+            }
+        } catch (e) {
+            console.error('Failed to load cache from server, falling back to localStorage:', e);
+            try {
+                globalCache = JSON.parse(localStorage.getItem('extractor_cache')) || {};
+            } catch(err) { globalCache = {}; }
+        }
         
         updateSessionStat();
         
@@ -84,13 +110,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('btn-save-settings').addEventListener('click', () => {
+    document.getElementById('btn-save-settings').addEventListener('click', async () => {
         limitSettings.accountLimit = parseInt(document.getElementById('setting-account-limit').value) || 5;
         limitSettings.humanDelay = parseInt(document.getElementById('setting-human-delay').value) || 3;
         const concInput = document.getElementById('setting-concurrency');
         if (concInput) limitSettings.concurrency = parseInt(concInput.value) || 1;
         
         localStorage.setItem('extractor_settings', JSON.stringify(limitSettings));
+        
+        // Save to DB
+        try {
+            await fetch('/hub/extractor/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(limitSettings)
+            });
+        } catch (e) {
+            console.error('Failed to save settings to server:', e);
+        }
+
         updateSessionStat();
         alert('Settings Saved!');
     });
@@ -414,6 +452,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     socials: socials || []
                 };
                 localStorage.setItem('extractor_cache', JSON.stringify(globalCache));
+                
+                // Save to server
+                fetch('/hub/extractor/cache', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(globalCache)
+                }).catch(e => console.error('Failed to save cache to server:', e));
             }
             
             if (usedCaptcha) {
@@ -461,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- History Management Logic ---
-    function saveSessionToHistory() {
+    async function saveSessionToHistory() {
         if (!currentSessionId) return;
         let history = [];
         try {
@@ -486,17 +531,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         localStorage.setItem('extractor_history', JSON.stringify(history));
+
+        // Save to DB
+        try {
+            await fetch('/hub/extractor/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sessionData)
+            });
+        } catch (e) {
+            console.error('Failed to save history session to DB:', e);
+        }
     }
 
-    function renderHistory() {
+    async function renderHistory() {
         const grid = document.getElementById('history-grid');
         if (!grid) return;
         
         let history = [];
+        
+        // Fetch from server DB
         try {
-            history = JSON.parse(localStorage.getItem('extractor_history')) || [];
-        } catch (e) {
-            history = [];
+            const res = await fetch('/hub/extractor/history');
+            if (res.ok) {
+                history = await res.json();
+                localStorage.setItem('extractor_history', JSON.stringify(history));
+            } else {
+                throw new Error();
+            }
+        } catch (err) {
+            console.error('Failed to load history from DB, fallback to localStorage:', err);
+            try {
+                history = JSON.parse(localStorage.getItem('extractor_history')) || [];
+            } catch (e) {
+                history = [];
+            }
         }
         
         if (history.length === 0) {
@@ -650,7 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
     }
 
-    function deleteSession(sessionId) {
+    async function deleteSession(sessionId) {
         let history = [];
         try {
             history = JSON.parse(localStorage.getItem('extractor_history')) || [];
@@ -660,6 +729,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         history = history.filter(s => s.id !== sessionId);
         localStorage.setItem('extractor_history', JSON.stringify(history));
+        
+        // Delete from DB
+        try {
+            await fetch(`/hub/extractor/history/${sessionId}`, {
+                method: 'DELETE'
+            });
+        } catch (e) {
+            console.error('Failed to delete history session in DB:', e);
+        }
         
         if (currentSessionId === sessionId) {
             // Reset active extraction workspace
