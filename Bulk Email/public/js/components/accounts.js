@@ -63,10 +63,16 @@ const AccountsComponent = {
             <span class="badge badge-blue">Configured</span>
           </div>
           <p class="text-sm text-muted mb-4">Connect via Google OAuth2 for token-based authentication.</p>
-          <a href="/auth/google" class="btn btn-google" id="btn-connect-oauth">
-            <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
-            Connect with Google
-          </a>
+          <div class="flex items-center gap-4">
+            <a href="/auth/google" class="btn btn-google" id="btn-connect-oauth">
+              <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+              Connect with Google
+            </a>
+            <button class="btn btn-secondary" onclick="AccountsComponent.showOAuthDebug()" id="btn-oauth-debug">
+              🔍 Diagnose Google OAuth Link
+            </button>
+          </div>
+          <div id="oauth-debug-panel" class="mt-4" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px;font-size:0.85rem;line-height:1.6;"></div>
         </div>` : ''}
 
         <!-- Connected Accounts -->
@@ -112,6 +118,60 @@ const AccountsComponent = {
       document.getElementById('app-password').value = '';
       this.render();
     } catch (err) { showToast(err.message, 'error'); }
+  },
+
+  async showOAuthDebug() {
+    const panel = document.getElementById('oauth-debug-panel');
+    if (!panel) return;
+
+    if (panel.style.display === 'block') {
+      panel.style.display = 'none';
+      return;
+    }
+
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="spinner" style="margin: 10px auto;"></div>';
+
+    try {
+      const data = await API.get('/auth/google-debug-url');
+      if (data.error) {
+        panel.innerHTML = `<div style="color:var(--red-600);font-weight:700;">Error: ${escapeHtml(data.error)}</div>`;
+        return;
+      }
+
+      let html = `
+        <h4 style="font-size:0.9rem;font-weight:700;margin-bottom:10px;color:var(--slate-800);">📐 Google OAuth Debug Details</h4>
+        <div style="background:#f1f5f9;border-radius:4px;padding:10px;margin-bottom:12px;font-family:monospace;font-size:0.78rem;overflow-x:auto;">
+          <strong>CLIENT_ID:</strong> ${escapeHtml(data.clientId)}<br>
+          <strong>REDIRECT_URI:</strong> ${escapeHtml(data.redirectUri)}<br>
+          <strong>SCOPES:</strong><br>${data.scopes.map(s => `• ${escapeHtml(s)}`).join('<br>')}
+        </div>
+        <div style="margin-bottom:10px;">
+          <strong style="display:block;margin-bottom:4px;color:var(--slate-700);">🔗 Full Generated Google Auth URL:</strong>
+          <textarea readonly style="width:100%;height:80px;font-family:monospace;font-size:0.75rem;padding:6px;border:1px solid var(--slate-300);border-radius:4px;background:white;resize:none;">${escapeHtml(data.authUrl)}</textarea>
+        </div>
+        <div class="flex gap-2">
+          <a href="${escapeHtml(data.authUrl)}" target="_blank" class="btn btn-sm btn-primary">
+            🚀 Open URL in New Tab
+          </a>
+          <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard.writeText('${escapeHtml(data.authUrl).replace(/'/g, "\\'")}');showToast('Auth URL copied to clipboard!', 'success');">
+            📋 Copy URL
+          </button>
+        </div>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--slate-500);border-top:1px dashed var(--slate-200);padding-top:10px;">
+          <strong>💡 Troubleshooting the 403 error:</strong><br>
+          If you get a 403 page on Google after clicking the button above:
+          <ol style="margin-top:6px;padding-left:16px;">
+            <li>Copy the <strong>REDIRECT_URI</strong> shown above and ensure it is EXACTLY matched in your GCP Credentials.</li>
+            <li>Copy the <strong>CLIENT_ID</strong> shown above and verify it matches your active client ID.</li>
+            <li>Try logging into your site from an <strong>Incognito Tab</strong> to prevent session collisions.</li>
+          </ol>
+        </div>
+      `;
+      panel.innerHTML = html;
+    } catch (err) {
+      panel.innerHTML = `<div style="color:var(--red-600);font-weight:700;">Failed to fetch debug info: ${escapeHtml(err.message)}</div>`;
+    }
   },
 
   async disconnect(id) {

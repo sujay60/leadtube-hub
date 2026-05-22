@@ -61,6 +61,31 @@ router.post('/add-account', (req, res) => {
   res.json(account);
 });
 
+// ===== OAUTH2: Retrieve debug details =====
+router.get('/google-debug-url', (req, res) => {
+  if (!isOAuthConfigured()) {
+    return res.json({ error: 'OAuth not configured' });
+  }
+  const oauth2Client = getOAuth2Client();
+  const scopes = [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile'
+  ];
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: scopes,
+    prompt: 'select_account consent'
+  });
+  res.json({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    redirectUri: `${process.env.BASE_URL || 'https://leadtube.onrender.com'}/auth/google/callback`,
+    scopes: scopes,
+    authUrl: authUrl
+  });
+});
+
 // ===== OAUTH2: Initiate Google OAuth2 flow =====
 router.get('/google', (req, res) => {
   if (!isOAuthConfigured()) {
