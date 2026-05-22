@@ -119,6 +119,8 @@
                                     <th>Subscribers</th>
                                     <th>Email Result</th>
                                     <th>Social Links</th>
+                                    <th>Owner Name</th>
+                                    <th>Last Video</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -154,6 +156,12 @@
                         <label>Concurrency (Parallel Tabs)</label>
                         <p class="setting-desc">How many YouTube channels to process at the exact same time. (Higher is faster but uses more memory).</p>
                         <input type="number" id="setting-concurrency" value="1" min="1" max="10" class="input-modern">
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>Gemini API Keys (Optional)</label>
+                        <p class="setting-desc">Used for strict Channel Owner Name extraction. Enter one key per line (will rotate if rate-limited). If empty, the bot will use regex and fall back to the channel name.</p>
+                        <textarea id="setting-gemini-keys" rows="3" placeholder="AIzaSy..." class="input-modern" style="width: 100%; min-height: 80px; padding: 0.75rem; border-radius: 8px; font-family: monospace; box-sizing: border-box; background: var(--bg-surface); color: var(--text-main); border: 1px solid var(--border);"></textarea>
                     </div>
                     
                     <button id="btn-save-settings" style="margin-top: 1rem;">Save Configuration</button>

@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeWorkers = 0;
     let currentSessionId = null;
     let currentFilename = "";
+    let geminiKeys = [];
+    let currentGeminiKeyIndex = 0;
 
     // --- DOM Elements ---
     const uploadZone = document.getElementById('upload-zone');
@@ -76,6 +78,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
+        // Load Gemini Keys
+        try {
+            const geminiRes = await fetch('/hub/api_keys');
+            if (geminiRes.ok) {
+                geminiKeys = await geminiRes.json() || [];
+                const textarea = document.getElementById('setting-gemini-keys');
+                if (textarea) {
+                    textarea.value = geminiKeys.join('\n');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load Gemini API keys from server:', e);
+        }
+        
         // Load Cache
         try {
             const cacheRes = await fetch('/hub/extractor/cache');
@@ -127,6 +143,21 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (e) {
             console.error('Failed to save settings to server:', e);
+        }
+
+        // Save Gemini Keys
+        const geminiInput = document.getElementById('setting-gemini-keys');
+        if (geminiInput) {
+            geminiKeys = geminiInput.value.split('\n').map(k => k.trim()).filter(k => k);
+            try {
+                await fetch('/hub/api_keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(geminiKeys)
+                });
+            } catch (e) {
+                console.error('Failed to save Gemini keys to server:', e);
+            }
         }
 
         updateSessionStat();
@@ -187,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
             skipEmptyLines: true,
             complete: function(results) {
                 const data = results.data;
-                // Expected headers from LeadTube: Channel Name, Subscribers, Emails, Last Upload, Link
+                // Expected headers: Channel Name, Subscribers, Emails, Social Links, Link, Owner Name, Last Video Title
                 queue = data.map((row, index) => {
                     return {
                         id: index,
@@ -196,7 +227,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         link: row['Link'] || '',
                         status: 'pending', // pending, scraping, done, failed
                         emailsFound: row['Emails'] || '', // Keep existing if any
-                        socialsFound: ''
+                        socialsFound: row['Social Links'] || '', // Keep existing if any
+                        ownerName: row['Owner Name'] || '', // Keep existing if any
+                        lastVideo: row['Last Video Title'] || '' // Keep existing if any
                     };
                 }).filter(q => q.link !== ''); // Only keep those with links
 
@@ -253,6 +286,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${item.subs}</td>
                     <td style="color: #10b981; font-weight: 600;">${item.emailsFound || '-'}</td>
                     <td style="color: #8b5cf6;">${item.socialsFound || '-'}</td>
+                    <td style="color: #f59e0b; font-weight: 600;">${item.ownerName || '-'}</td>
+                    <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.lastVideo || ''}">${item.lastVideo || '-'}</td>
                     <td>
                         ${(item.status === 'pending' || item.status === 'scraping') ? `<button class="btn-skip" data-id="${item.id}" style="font-size:0.6rem; padding: 0.3rem 0.6rem; border: 1px solid var(--danger); border-radius: 4px; color: var(--danger); background: transparent; cursor: pointer;">Skip</button>` : '-'}
                     </td>
@@ -394,6 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     id: currentItem.id,
                     emails: cachedData.emails,
                     socials: cachedData.socials,
+                    ownerName: cachedData.ownerName || '',
+                    lastVideo: cachedData.lastVideo || '',
                     usedCaptcha: false, // Cached, so no limits used
                     error: null
                 });
@@ -410,6 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'APP_COMMAND_SCRAPE',
                 payload: {
                     id: currentItem.id,
+                    name: currentItem.name,
                     url: currentItem.link,
                     cacheKey: channelId,
                     delayMs: actualDelay
@@ -418,8 +456,76 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function handleScrapeResult(payload) {
-        const { id, emails, socials, usedCaptcha, error } = payload;
+    async function extractOwnerWithGemini(description, socials, channelName) {
+        if (!geminiKeys || geminiKeys.length === 0) return null;
+        
+        const key = geminiKeys[currentGeminiKeyIndex];
+        const prompt = `You are a strict data extraction bot. Your sole task is to extract the real personal name of the human channel host, creator, presenter, or owner from the channel's description and social links.
+
+Channel Name: "${channelName}"
+Description: "${description}"
+Social Links: "${(socials || []).join(' | ')}"
+
+Strict Guidelines:
+1. Extract the host's actual personal name (e.g. "Marques Brownlee", "Linus Sebastian", "John Doe").
+2. Look at social links (like Instagram/Twitter handles) and the description for clues of the owner's real personal name.
+3. If you find a personal name with high confidence, output ONLY that personal name. No extra punctuation, no explanations, no titles, and no greetings.
+4. IMPORTANT: If there is no human host name explicitly stated, or if it is a corporate, brand, or group channel (e.g., Apple, Google, TechInsider), or if you are not 100% sure of the host's real personal name, you MUST return the exact Channel Name "${channelName}". Do not guess or make up a personal name.
+5. Return ONLY the final result, nothing else.`;
+
+        const model = 'gemini-2.0-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1 }
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.error || !response.ok) {
+                const errorMessage = data.error?.message || 'API Error';
+                if (errorMessage.toLowerCase().includes('quota') || response.status === 429) {
+                    console.warn(`[LeadTube Bot] Gemini key rotation due to rate limit/quota.`);
+                    rotateGeminiKey();
+                    return extractOwnerWithGemini(description, socials, channelName);
+                }
+                throw new Error(errorMessage);
+            }
+
+            if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
+                let result = data.candidates[0].content.parts[0].text.trim();
+                // Clean common LLM formatting prefixes and surrounding quotes
+                result = result.replace(/^(name|owner|host|channel owner|creator|channel host|real name|personal name|the owner|the host|the creator)\s*:\s*/i, '');
+                result = result.replace(/^["']|["']$/g, '');
+                result = result.trim();
+                return result || channelName;
+            }
+        } catch (e) {
+            console.error('[LeadTube Bot] Gemini request error:', e);
+            if (rotateGeminiKey()) {
+                return extractOwnerWithGemini(description, socials, channelName);
+            }
+        }
+        return channelName;
+    }
+
+    function rotateGeminiKey() {
+        if (currentGeminiKeyIndex < geminiKeys.length - 1) {
+            currentGeminiKeyIndex++;
+            console.log(`[LeadTube Bot] Rotated to Gemini key index ${currentGeminiKeyIndex}`);
+            return true;
+        }
+        return false;
+    }
+
+    async function handleScrapeResult(payload) {
+        const { id, emails, socials, usedCaptcha, error, ownerName, description, lastVideo } = payload;
         
         const item = queue.find(q => q.id === id);
         if (!item) return;
@@ -432,6 +538,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             item.status = 'done';
             
+            // Set last video title
+            item.lastVideo = lastVideo || '';
+
+            // Handle Owner Name (Gemini AI with strict prompt and fallbacks)
+            let finalOwner = ownerName || item.name; // fallback is regex or channel name
+            if (geminiKeys && geminiKeys.length > 0) {
+                console.log(`[LeadTube Bot] Querying Gemini for owner name of channel: ${item.name}`);
+                try {
+                    const extracted = await extractOwnerWithGemini(description || '', socials || [], item.name);
+                    if (extracted) {
+                        finalOwner = extracted;
+                    }
+                } catch (geminiErr) {
+                    console.error('[LeadTube Bot] Gemini owner extraction failed, using regex/channel fallback:', geminiErr);
+                }
+            }
+            item.ownerName = finalOwner;
+
             // Append new emails if existing ones are there, else replace
             if (emails && emails.length > 0) {
                 const uniqueEmails = [...new Set([...(item.emailsFound ? item.emailsFound.split(', ') : []), ...emails])];
@@ -449,7 +573,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 let channelId = item.link.split('/channel/')[1] || item.link;
                 globalCache[channelId] = {
                     emails: item.emailsFound ? item.emailsFound.split(', ') : [],
-                    socials: socials || []
+                    socials: socials || [],
+                    ownerName: item.ownerName || '',
+                    lastVideo: item.lastVideo || ''
                 };
                 localStorage.setItem('extractor_cache', JSON.stringify(globalCache));
                 
@@ -485,20 +611,23 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExport.addEventListener('click', () => {
         if (queue.length === 0) return;
         
-        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link\n";
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link,Owner Name,Last Video Title\n";
         queue.forEach(row => {
             const name = `"${(row.name || '').replace(/"/g, '""')}"`;
             const subs = `"${(row.subs || '').replace(/"/g, '""')}"`;
             const emails = `"${(row.emailsFound || '').replace(/"/g, '""')}"`;
             const socials = `"${(row.socialsFound || '').replace(/"/g, '""')}"`;
             const link = `"${(row.link || '').replace(/"/g, '""')}"`;
+            const owner = `"${(row.ownerName || '').replace(/"/g, '""')}"`;
+            const lastVideo = `"${(row.lastVideo || '').replace(/"/g, '""')}"`;
             
-            csvContent += `${name},${subs},${emails},${socials},${link}\n`;
+            csvContent += `${name},${subs},${emails},${socials},${link},${owner},${lastVideo}\n`;
         });
 
-        const encodedUri = encodeURI(csvContent);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
+        link.setAttribute("href", url);
         link.setAttribute("download", `extracted_leads_${new Date().getTime()}.csv`);
         document.body.appendChild(link);
         link.click();
@@ -696,20 +825,23 @@ document.addEventListener('DOMContentLoaded', () => {
     function downloadSessionCSV(session) {
         if (!session.queue || session.queue.length === 0) return;
         
-        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link\n";
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Social Links,Link,Owner Name,Last Video Title\n";
         session.queue.forEach(row => {
             const name = `"${(row.name || '').replace(/"/g, '""')}"`;
             const subs = `"${(row.subs || '').replace(/"/g, '""')}"`;
             const emails = `"${(row.emailsFound || '').replace(/"/g, '""')}"`;
             const socials = `"${(row.socialsFound || '').replace(/"/g, '""')}"`;
             const link = `"${(row.link || '').replace(/"/g, '""')}"`;
+            const owner = `"${(row.ownerName || '').replace(/"/g, '""')}"`;
+            const lastVideo = `"${(row.lastVideo || '').replace(/"/g, '""')}"`;
             
-            csvContent += `${name},${subs},${emails},${socials},${link}\n`;
+            csvContent += `${name},${subs},${emails},${socials},${link},${owner},${lastVideo}\n`;
         });
 
-        const encodedUri = encodeURI(csvContent);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
+        link.setAttribute("href", url);
         
         // Sanitize filename
         const cleanName = session.filename.replace(/\.csv$/i, '');
