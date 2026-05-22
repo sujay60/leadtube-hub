@@ -55,6 +55,28 @@ const AccountsComponent = {
           </div>
         </div>
 
+        <!-- Bulk Setup: Multiple App Passwords -->
+        <div class="card mt-4" style="border: 2px solid var(--purple-300); background: linear-gradient(135deg, var(--purple-50), var(--white));">
+          <div class="card-header">
+            <h3 class="card-title" style="color: var(--purple-700);">🔄 Bulk Import Accounts (Round-Robin)</h3>
+            <span class="badge badge-purple" style="background:var(--purple-100);color:var(--purple-700);">Advanced</span>
+          </div>
+          <p class="text-sm text-muted mb-4">Paste multiple Gmail accounts (one per line) to connect them all in one click! Perfect for round-robin sending.</p>
+          
+          <div class="form-group mb-4">
+            <label class="form-label" style="font-weight:600;">Account List (format: <code>email:app_password</code>, one per line)</label>
+            <textarea class="form-textarea" id="app-bulk-list" rows="5" placeholder="sender1@gmail.com:xxxx xxxx xxxx xxxx&#10;sender2@gmail.com:yyyy yyyy yyyy yyyy" style="font-family: monospace; font-size: 0.85rem; padding: 12px; border-color: var(--purple-200);"></textarea>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <button class="btn btn-primary" style="background: var(--purple-600); border-color: var(--purple-600);" onclick="AccountsComponent.connectBulkAppPasswords()" id="btn-connect-bulk">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><path d="M12 18V6"/><path d="M6 12h12"/></svg>
+              Bulk Connect Accounts
+            </button>
+            <span class="text-sm text-muted" id="bulk-loading-status"></span>
+          </div>
+        </div>
+
         ${authMode.oauth_configured ? `
         <!-- OAuth2 Setup -->
         <div class="card mt-4">
@@ -112,6 +134,60 @@ const AccountsComponent = {
       document.getElementById('app-password').value = '';
       this.render();
     } catch (err) { showToast(err.message, 'error'); }
+  },
+
+  async connectBulkAppPasswords() {
+    const listText = document.getElementById('app-bulk-list').value.trim();
+    if (!listText) { showToast('Please enter at least one account line', 'error'); return; }
+
+    const lines = listText.split('\n');
+    const accounts = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      let separator = ':';
+      if (!line.includes(':') && line.includes(',')) {
+        separator = ',';
+      }
+
+      const parts = line.split(separator);
+      if (parts.length < 2) {
+        showToast(`Line ${i + 1} has an invalid format. Use email:app_password`, 'error');
+        return;
+      }
+
+      const email = parts[0].trim();
+      const app_password = parts.slice(1).join(separator).trim();
+
+      if (!email.includes('@')) {
+        showToast(`Line ${i + 1} contains an invalid email address: "${email}"`, 'error');
+        return;
+      }
+
+      accounts.push({ email, app_password });
+    }
+
+    if (accounts.length === 0) {
+      showToast('No valid accounts found in list', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-connect-bulk');
+    const status = document.getElementById('bulk-loading-status');
+    btn.disabled = true;
+    status.textContent = 'Importing...';
+
+    try {
+      const res = await API.post('/auth/add-accounts-bulk', { accounts });
+      showToast(`Imported: ${res.added} added, ${res.updated} updated, ${res.failed.length} failed.`, 'success');
+      this.render();
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.disabled = false;
+      status.textContent = '';
+    }
   },
 
   async disconnect(id) {

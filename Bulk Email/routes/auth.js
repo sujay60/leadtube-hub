@@ -61,6 +61,53 @@ router.post('/add-account', (req, res) => {
   res.json(account);
 });
 
+// ===== APP PASSWORD: Bulk-add accounts =====
+router.post('/add-accounts-bulk', (req, res) => {
+  const { accounts } = req.body;
+
+  if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
+    return res.status(400).json({ error: 'An array of accounts is required' });
+  }
+
+  const db = getDb();
+  const results = { added: 0, updated: 0, failed: [] };
+
+  // Run in a single transaction for maximum performance
+  const insertStmt = db.prepare(`INSERT INTO accounts (email, display_name, picture_url, access_token, refresh_token, token_expiry)
+    VALUES (?, ?, '', ?, 'app_password', 0)`);
+  const updateStmt = db.prepare(`UPDATE accounts SET access_token = ?, refresh_token = 'app_password', display_name = ? WHERE email = ?`);
+  const checkStmt = db.prepare('SELECT id FROM accounts WHERE email = ?');
+
+  const transaction = db.transaction((list) => {
+    for (const acc of list) {
+      const email = (acc.email || '').trim().toLowerCase();
+      const app_password = (acc.app_password || '').trim();
+
+      if (!email || !app_password || !email.includes('@')) {
+        results.failed.push({ email, error: 'Invalid email or app password' });
+        continue;
+      }
+
+      const existing = checkStmt.get(email);
+      if (existing) {
+        updateStmt.run(app_password, email.split('@')[0], email);
+        results.updated++;
+      } else {
+        insertStmt.run(email, email.split('@')[0], app_password);
+        results.added++;
+      }
+    }
+  });
+
+  try {
+    transaction(accounts);
+    res.json({ success: true, ...results });
+  } catch (err) {
+    console.error('Bulk add error:', err);
+    res.status(500).json({ error: 'Failed to process bulk accounts: ' + err.message });
+  }
+});
+
 // ===== OAUTH2: Initiate Google OAuth2 flow =====
 router.get('/google', (req, res) => {
   if (!isOAuthConfigured()) {
