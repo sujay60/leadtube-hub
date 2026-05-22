@@ -81,14 +81,15 @@ const CampaignsComponent = {
   },
 
   async showCreateForm() {
-    const [accounts, groups] = await Promise.all([
-      API.get('/auth/accounts'), API.get('/api/contacts/groups')
+    const [accounts, groups, templates] = await Promise.all([
+      API.get('/auth/accounts'), API.get('/api/contacts/groups'), API.get('/api/templates')
     ]);
     if (!accounts.length) { showToast('Connect a Gmail account first', 'error'); window.location.hash = '#/accounts'; return; }
     if (!groups.length) { showToast('Create a contact group first', 'error'); window.location.hash = '#/contacts'; return; }
 
     window._appAccounts = accounts;
     window._appGroups = groups;
+    window._appTemplates = templates || [];
     window._seqTree = [{ id: 'root', parentId: null, subject: '', body: '' }];
     window._nodeIdCounter = 1;
 
@@ -179,6 +180,16 @@ const CampaignsComponent = {
               
               ${conditionHtml}
 
+              ${(window._appTemplates && window._appTemplates.length) ? `
+              <div class="form-group mb-3">
+                <label class="form-label" style="font-size:.8rem;color:var(--blue-600);font-weight:600;">📄 Load from Template</label>
+                <select class="form-select" style="padding:6px 10px;font-size:.85rem;border-color:var(--blue-200);background-color:var(--blue-50);" onchange="CampaignsComponent.loadTemplateIntoNode('${node.id}', this.value)">
+                  <option value="">— Choose a saved template —</option>
+                  ${window._appTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.name)} — ${escapeHtml(t.subject)}</option>`).join('')}
+                </select>
+              </div>
+              ` : ''}
+
               <div class="form-group mb-3">
                 <label class="form-label" style="font-size:.8rem;">Subject Line</label>
                 <input class="form-input" style="padding:6px 10px;font-size:.85rem;" value="${escapeHtml(node.subject)}" placeholder="Enter subject..." oninput="CampaignsComponent.updateNode('${node.id}', 'subject', this.value)" />
@@ -209,6 +220,18 @@ const CampaignsComponent = {
   updateNode(id, key, val) {
     const node = window._seqTree.find(n => n.id === id);
     if (node) node[key] = val;
+  },
+
+  loadTemplateIntoNode(nodeId, templateId) {
+    if (!templateId) return;
+    const node = window._seqTree.find(n => n.id === nodeId);
+    const template = (window._appTemplates || []).find(t => t.id === parseInt(templateId));
+    if (node && template) {
+      node.subject = template.subject || '';
+      node.body = template.body_html || template.body_text || '';
+      this.renderTree();
+      showToast(`Template "${template.name}" loaded!`, 'success');
+    }
   },
 
   addBranch(parentId) {
