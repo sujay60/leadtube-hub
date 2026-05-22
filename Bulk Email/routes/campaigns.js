@@ -164,14 +164,61 @@ router.post('/:id/send', async (req, res) => {
   const db = getDb();
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-  if (campaign.status === 'sending') return res.status(400).json({ error: 'Already sending' });
+
+  // If stuck in 'sending' from a server restart, the startup recovery should have reset it.
+  // If it somehow still shows 'sending' and no process is running, reject with guidance.
+  if (campaign.status === 'sending') {
+    return res.status(400).json({
+      error: 'Campaign is already sending. If it appears stuck (server restarted), use the Reset Stuck button to recover it.'
+    });
+  }
 
   db.prepare("UPDATE campaigns SET status = 'sending', is_paused = 0, started_at = CURRENT_TIMESTAMP WHERE id = ?").run(campaign.id);
   sendCampaignEmails(campaign.id).catch(err => {
-    console.error('Campaign send error:', err);
+    console.error(`Campaign ${campaign.id} send error:`, err.message, err.stack || '');
     db.prepare("UPDATE campaigns SET status = 'failed' WHERE id = ?").run(campaign.id);
   });
   res.json({ success: true, message: 'Campaign is now sending' });
+});
+
+// Reset a campaign stuck in 'sending' (caused by server restart) back to 'draft'
+router.post('/:id/reset-stuck', (req, res) => {
+  const db = getDb();
+  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status !== 'sending') {
+    return res.status(400).json({ error: `Campaign is not stuck — current status: ${campaign.status}` });
+  }
+  db.prepare("UPDATE campaigns SET status = 'draft', is_paused = 0 WHERE id = ?").run(campaign.id);
+  console.log(`  Manual reset: Campaign ${campaign.id} "${campaign.name}" reset from 'sending' to 'draft'`);
+  res.json({ success: true, message: 'Campaign reset to draft. You can now click Send again.' });
+});
+
+// Retry failed emails in a campaign
+router.post('/:id/retry-failed', (req, res) => {
+  const db = getDb();
+  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+  if (campaign.status === 'sending') return res.status(400).json({ error: 'Campaign is already sending' });
+
+  // Update failed emails back to pending
+  const resetResult = db.prepare("UPDATE campaign_emails SET status = 'pending', error_message = NULL WHERE campaign_id = ? AND status = 'failed'").run(campaign.id);
+  
+  if (resetResult.changes === 0) {
+    return res.status(400).json({ error: 'No failed emails found to retry' });
+  }
+
+  // Update campaign status and reset failed count
+  db.prepare("UPDATE campaigns SET status = 'sending', failed_count = 0, is_paused = 0, started_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(campaign.id);
+
+  // Trigger sending
+  sendCampaignEmails(campaign.id).catch(err => {
+    console.error(`Campaign ${campaign.id} retry send error:`, err.message, err.stack || '');
+    db.prepare("UPDATE campaigns SET status = 'failed' WHERE id = ?").run(campaign.id);
+  });
+
+  res.json({ success: true, message: `Retrying ${resetResult.changes} failed emails` });
 });
 
 // Pause campaign
@@ -227,6 +274,101 @@ router.post('/:id/preview', (req, res) => {
 
   const { renderTemplate } = require('../services/templateEngine');
   res.json({ subject: renderTemplate(campaign.subject, contact), body: renderTemplate(campaign.body_html, contact) });
+});
+
+// Diagnose email sending — test connectivity and return detailed errors
+router.post('/diagnose', async (req, res) => {
+  const db = getDb();
+  const accounts = db.prepare('SELECT * FROM accounts').all();
+  
+  if (!accounts.length) {
+    return res.json({ 
+      success: false, 
+      error: 'No email accounts configured. Go to Accounts tab and add one.',
+      accounts: [],
+      env: {
+        hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+        hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+        baseUrl: process.env.BASE_URL || '(not set — defaults to https://leadtube.onrender.com)',
+        nodeEnv: process.env.NODE_ENV || '(not set)'
+      }
+    });
+  }
+
+  const results = [];
+  for (const acc of accounts) {
+    const result = { 
+      email: acc.email, 
+      type: acc.refresh_token === 'app_password' ? 'App Password' : 'OAuth2',
+      hasAccessToken: !!acc.access_token,
+      hasRefreshToken: !!acc.refresh_token,
+      tokenExpiry: acc.token_expiry ? new Date(acc.token_expiry).toISOString() : 'N/A',
+      tokenExpired: acc.token_expiry ? acc.token_expiry < Date.now() : 'N/A'
+    };
+    
+    try {
+      const nodemailer = require('nodemailer');
+      
+      if (acc.refresh_token === 'app_password') {
+        // Test App Password SMTP connection
+        const transporter = nodemailer.createTransport({
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+          auth: { user: acc.email, pass: acc.access_token },
+          connectionTimeout: 10000,
+          socketTimeout: 10000,
+          tls: { rejectUnauthorized: false }
+        });
+        await transporter.verify();
+        result.status = 'OK';
+        result.message = 'SMTP connection successful!';
+      } else {
+        // Test OAuth2 — try Gmail API
+        const { google } = require('googleapis');
+        const oauth2Client = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET,
+          `${process.env.BASE_URL || 'https://leadtube.onrender.com'}/auth/google/callback`
+        );
+        oauth2Client.setCredentials({
+          access_token: acc.access_token,
+          refresh_token: acc.refresh_token,
+          expiry_date: acc.token_expiry
+        });
+        
+        // Try to refresh the token
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        db.prepare('UPDATE accounts SET access_token = ?, token_expiry = ? WHERE id = ?')
+          .run(credentials.access_token, credentials.expiry_date, acc.id);
+        
+        // Try to list 1 message to verify Gmail API works
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        await gmail.users.getProfile({ userId: 'me' });
+        
+        result.status = 'OK';
+        result.message = 'OAuth2 token refresh + Gmail API access successful!';
+        result.newExpiry = new Date(credentials.expiry_date).toISOString();
+      }
+    } catch (err) {
+      result.status = 'FAILED';
+      result.message = err.message;
+      result.code = err.code || '';
+      result.fullError = (err.stack || '').split('\n').slice(0, 5).join('\n');
+    }
+    results.push(result);
+  }
+
+  res.json({
+    success: results.every(r => r.status === 'OK'),
+    accounts: results,
+    env: {
+      hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+      hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+      baseUrl: process.env.BASE_URL || '(not set)',
+      nodeEnv: process.env.NODE_ENV || '(not set)'
+    }
+  });
 });
 
 // Delete campaign

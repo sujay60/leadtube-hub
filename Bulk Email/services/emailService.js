@@ -16,8 +16,11 @@ function getOAuth2Client() {
 async function createTransport(account) {
   if (account.refresh_token === 'app_password') {
     return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: account.email, pass: account.access_token }
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: account.email, pass: account.access_token },
+      tls: { rejectUnauthorized: false }
     });
   }
 
@@ -28,20 +31,32 @@ async function createTransport(account) {
     expiry_date: account.token_expiry
   });
 
-  const { credentials } = await oauth2Client.refreshAccessToken();
+  let credentials;
+  try {
+    const refreshResult = await oauth2Client.refreshAccessToken();
+    credentials = refreshResult.credentials;
+  } catch (refreshErr) {
+    console.error(`[emailService] Failed to refresh OAuth token for ${account.email}:`, refreshErr.message);
+    throw new Error(`Token refresh failed: ${refreshErr.message}. Please reconnect this account in the Accounts tab.`);
+  }
+
   const db = getDb();
   db.prepare('UPDATE accounts SET access_token = ?, token_expiry = ? WHERE id = ?')
     .run(credentials.access_token, credentials.expiry_date, account.id);
 
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
-      type: 'OAuth2', user: account.email,
+      type: 'OAuth2',
+      user: account.email,
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       refreshToken: account.refresh_token,
       accessToken: credentials.access_token
-    }
+    },
+    tls: { rejectUnauthorized: false }
   });
 }
 
@@ -151,9 +166,10 @@ async function sendCampaignEmails(campaignId) {
   for (const aid of accountIds) {
     const acc = db.prepare('SELECT * FROM accounts WHERE id = ?').get(aid);
     if (acc) {
-      accounts.push(acc);
       try {
-        transporters.push(await createTransport(acc));
+        const transport = await createTransport(acc);
+        transporters.push(transport);
+        accounts.push(acc);
       } catch(err) {
         console.error(`Failed to create transport for ${acc.email}:`, err.message);
       }

@@ -66,6 +66,18 @@ app.get('*', (req, res) => {
 async function start() {
   await initDatabase();
 
+  // ── Recovery: reset any campaigns stuck in 'sending' from a previous crashed/restarted process
+  const { getDb } = require('./database/db');
+  const db = getDb();
+  const stuck = db.prepare("SELECT id, name FROM campaigns WHERE status = 'sending'").all();
+  if (stuck.length) {
+    console.log(`  ⚠️  Found ${stuck.length} campaign(s) stuck in 'sending' — resetting to 'draft' for re-send`);
+    for (const c of stuck) {
+      db.prepare("UPDATE campaigns SET status = 'draft', is_paused = 0 WHERE id = ?").run(c.id);
+      console.log(`     ↳ Reset: "${c.name}" (id ${c.id})`);
+    }
+  }
+
   // Start the follow-up auto-sender scheduler and inbox scanner
   const { startScheduler, checkOverdueFollowUps } = require('./services/emailService');
   const { startInboxScanner } = require('./services/inboxService');

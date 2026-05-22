@@ -18,7 +18,7 @@ const express = require('express');
 const session = require('express-session');
 
 // ── Import MailBlast (Bulk Email) modules ──
-const { initDatabase } = require('./Bulk Email/database/db');
+const { initDatabase, getDb } = require('./Bulk Email/database/db');
 const authRoutes = require('./Bulk Email/routes/auth');
 const templateRoutes = require('./Bulk Email/routes/templates');
 const contactRoutes = require('./Bulk Email/routes/contacts');
@@ -612,6 +612,21 @@ app.use((req, res, next) => {
 // ── Start Server ──
 async function start() {
   await initDatabase();
+  
+  // Reset any campaigns stuck in 'sending' (e.g. if server crashed/restarted)
+  try {
+    const db = getDb();
+    const stuck = db.prepare("SELECT id, name FROM campaigns WHERE status = 'sending'").all();
+    if (stuck.length) {
+      console.log(`  ⚠️  Found ${stuck.length} campaign(s) stuck in 'sending' — resetting to 'draft'`);
+      for (const c of stuck) {
+        db.prepare("UPDATE campaigns SET status = 'draft', is_paused = 0 WHERE id = ?").run(c.id);
+        console.log(`     ↳ Reset: "${c.name}" (id ${c.id})`);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to reset stuck campaigns on startup:', err.message);
+  }
 
   // Start MailBlast background services
   const { startScheduler, checkOverdueFollowUps } = require('./Bulk Email/services/emailService');

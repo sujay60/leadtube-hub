@@ -55,8 +55,11 @@ router.post('/reply', async (req, res) => {
     let transporter;
     if (reply.refresh_token === 'app_password') {
       transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: reply.sender_email, pass: reply.access_token }
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: { user: reply.sender_email, pass: reply.access_token },
+        tls: { rejectUnauthorized: false }
       });
     } else {
       const oauth2Client = getOAuth2Client();
@@ -73,17 +76,32 @@ router.post('/reply', async (req, res) => {
         oauth2Client.setCredentials(credentials);
       }
 
-      transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          type: 'OAuth2',
-          user: reply.sender_email,
-          clientId: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          refreshToken: reply.refresh_token,
-          accessToken: oauth2Client.credentials.access_token
+      const MailComposer = require('nodemailer/lib/mail-composer');
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      transporter = {
+        sendMail: async (mailOptions) => {
+          const composer = new MailComposer(mailOptions);
+          const message = await composer.compile().build();
+          
+          const encodedMessage = Buffer.from(message)
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+
+          const res = await gmail.users.messages.send({
+            userId: 'me',
+            requestBody: {
+              raw: encodedMessage
+            }
+          });
+
+          return {
+            messageId: res.data.id
+          };
         }
-      });
+      };
     }
 
     const mailOptions = {

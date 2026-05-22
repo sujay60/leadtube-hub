@@ -10,6 +10,7 @@ primary_region = 'bom'  # Mumbai, closest to India
   PORT = '3000'
   NODE_ENV = 'production'
   DB_PATH = '/data/mailblast.db'
+  BASE_URL = 'https://mailblast.fly.dev'
 
 [http_service]
   internal_port = 3000

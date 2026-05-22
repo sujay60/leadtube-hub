@@ -313,11 +313,14 @@ const CampaignsComponent = {
             ${c.status === 'draft' ? `<button class="btn btn-primary" onclick="CampaignsComponent.send(${c.id})" id="btn-send-campaign">🚀 Send Now</button>` : ''}
             ${isScheduled ? `<button class="btn btn-primary" onclick="CampaignsComponent.send(${c.id})" id="btn-send-now">🚀 Send Now (skip wait)</button>` : ''}
             ${isSending ? `<button class="btn btn-secondary" onclick="CampaignsComponent.pause(${c.id})" id="btn-pause">⏸ Pause</button>` : ''}
+            ${isSending ? `<button class="btn btn-secondary" onclick="CampaignsComponent.resetStuck(${c.id})" id="btn-reset-stuck" title="Use this if the campaign is frozen at 0 emails after a server restart" style="background:var(--amber,#f59e0b);color:white;border-color:var(--amber,#f59e0b);">🔧 Reset Stuck</button>` : ''}
             ${isPaused ? `<button class="btn btn-primary" onclick="CampaignsComponent.resume(${c.id})" id="btn-resume">▶ Resume</button>` : ''}
             ${showFollowUpBtn}
             <button class="btn btn-danger btn-sm" onclick="CampaignsComponent.remove(${c.id})">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="CampaignsComponent.diagnoseEmail()" id="btn-diagnose" style="background:#7c3aed;color:white;border-color:#7c3aed;font-weight:700;">🔍 Diagnose Email</button>
           </div>
         </div>
+        <div id="diagnose-results"></div>
 
         ${isScheduled ? `
           <div class="card mb-4" style="border:2px solid var(--blue-300);background:linear-gradient(135deg, var(--blue-50), var(--white));">
@@ -466,14 +469,29 @@ const CampaignsComponent = {
         ` : '')}
 
         <div class="card">
-          <div class="card-header"><h3 class="card-title">Email Log</h3></div>
+          <div class="card-header">
+            <h3 class="card-title">Email Log</h3>
+            ${c.failed_count > 0 ? `<button class="btn btn-secondary btn-sm" onclick="CampaignsComponent.retryFailed(${c.id})" id="btn-retry-failed" style="font-size:.8rem;">🔁 Retry Failed (${c.failed_count})</button>` : ''}
+          </div>
+          ${(c.emails||[]).some(e => e.status === 'failed' && e.error_message) ? `
+            <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:.85rem;">
+              <strong>⚠️ Why emails failed:</strong>
+              <ul style="margin:6px 0 0 16px;padding:0;">
+                ${[...new Set((c.emails||[]).filter(e=>e.error_message).map(e=>e.error_message))].map(msg=>`<li style="margin-top:4px;color:#856404;">${escapeHtml(msg)}</li>`).join('')}
+              </ul>
+              <p style="margin:8px 0 0;color:#856404;">
+                <strong>Fix:</strong> Go to <strong>Accounts</strong> tab → reconnect your Gmail account with a fresh App Password or re-authorize via OAuth.
+              </p>
+            </div>
+          ` : ''}
           <div class="table-container">
-            <table><thead><tr><th>Contact</th><th>Email</th><th>Status</th><th>Opened</th><th>Clicked</th><th>Sent At</th></tr></thead>
+            <table><thead><tr><th>Contact</th><th>Email</th><th>Status</th><th>Error</th><th>Opened</th><th>Clicked</th><th>Sent At</th></tr></thead>
             <tbody>
               ${(c.emails||[]).map(e => `<tr>
                 <td>${escapeHtml(e.first_name||e.channel_name||'—')}</td>
                 <td>${escapeHtml(e.email)}</td>
                 <td><span class="badge badge-${e.status==='sent'?'green':e.status==='failed'?'red':'slate'}">${e.status}</span></td>
+                <td style="max-width:240px;font-size:.78rem;color:var(--red,#ef4444);">${e.error_message ? escapeHtml(e.error_message) : '—'}</td>
                 <td>${e.opened_at ? '✅ ' + formatDate(e.opened_at) : '—'}</td>
                 <td>${e.clicked_at ? '✅ ' + formatDate(e.clicked_at) : '—'}</td>
                 <td>${formatDate(e.sent_at)}</td>
@@ -674,6 +692,71 @@ Best regards"></textarea>
         if (s.status === 'completed' || s.status === 'failed') { clearInterval(this.pollInterval); this.pollInterval = null; this.showDetails(id); }
       } catch(e) {}
     }, 2000);
+  },
+
+  async diagnoseEmail() {
+    const box = document.getElementById('diagnose-results');
+    if (!box) return;
+    box.innerHTML = '<div class="card" style="border:2px solid #7c3aed;padding:20px;"><div class="spinner"></div><p style="text-align:center;margin-top:12px;">Testing email connections... this may take 15 seconds</p></div>';
+    try {
+      const data = await API.post('/api/campaigns/diagnose');
+      let html = `<div class="card" style="border:2px solid ${data.success ? '#22c55e' : '#ef4444'};padding:20px;margin-bottom:16px;">`;
+      html += `<h3 style="font-size:1.1rem;font-weight:800;margin-bottom:12px;">${data.success ? '✅ All accounts OK!' : '❌ Email Sending Problem Detected'}</h3>`;
+      
+      // Environment info
+      html += `<div style="background:#f1f5f9;border-radius:8px;padding:12px;margin-bottom:16px;font-size:.82rem;font-family:monospace;">`;
+      html += `<strong>Server Environment:</strong><br>`;
+      html += `CLIENT_ID configured: ${data.env.hasClientId ? '✅ Yes' : '❌ No'}<br>`;
+      html += `CLIENT_SECRET configured: ${data.env.hasClientSecret ? '✅ Yes' : '❌ No'}<br>`;
+      html += `BASE_URL: ${data.env.baseUrl}<br>`;
+      html += `NODE_ENV: ${data.env.nodeEnv}`;
+      html += `</div>`;
+      
+      // Each account
+      for (const acc of (data.accounts || [])) {
+        const ok = acc.status === 'OK';
+        html += `<div style="background:${ok ? '#f0fdf4' : '#fef2f2'};border:1px solid ${ok ? '#86efac' : '#fca5a5'};border-radius:8px;padding:14px;margin-bottom:10px;">`;
+        html += `<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">${ok ? '✅' : '❌'} ${acc.email} (${acc.type})</div>`;
+        html += `<div style="font-size:.82rem;font-family:monospace;color:${ok ? '#166534' : '#991b1b'};white-space:pre-wrap;word-break:break-all;">${acc.message || 'No details'}</div>`;
+        if (acc.code) html += `<div style="font-size:.78rem;color:#6b7280;margin-top:4px;">Error Code: ${acc.code}</div>`;
+        if (acc.fullError) html += `<pre style="font-size:.72rem;color:#9ca3af;margin-top:6px;white-space:pre-wrap;max-height:120px;overflow:auto;">${acc.fullError}</pre>`;
+        if (acc.tokenExpiry && acc.tokenExpiry !== 'N/A') html += `<div style="font-size:.78rem;color:#6b7280;margin-top:4px;">Token Expiry: ${acc.tokenExpiry} | Expired: ${acc.tokenExpired}</div>`;
+        html += `</div>`;
+      }
+      
+      if (!data.success) {
+        html += `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:12px;margin-top:12px;font-size:.85rem;">`;
+        html += `<strong>💡 How to fix:</strong><br>`;
+        html += `• If you see "Connection timeout" → Your hosting provider blocks SMTP ports. The fix requires using Gmail API instead of SMTP.<br>`;
+        html += `• If you see "Invalid credentials" or "Invalid login" → Your App Password is wrong. Generate a new one in Google Account → Security → App Passwords.<br>`;
+        html += `• If you see "Token refresh failed" → Go to Accounts tab, remove the account, and reconnect it via Google OAuth.<br>`;
+        html += `• <strong>Screenshot this entire box and share it for help!</strong>`;
+        html += `</div>`;
+      }
+      
+      html += `</div>`;
+      box.innerHTML = html;
+    } catch(e) {
+      box.innerHTML = `<div class="card" style="border:2px solid #ef4444;padding:20px;"><h3 style="color:#ef4444;">❌ Diagnose Failed</h3><pre style="white-space:pre-wrap;">${e.message}</pre></div>`;
+    }
+  },
+
+  async retryFailed(id) {
+    if (!confirm('Reset all failed emails back to pending and re-send this campaign?')) return;
+    try {
+      await API.post(`/api/campaigns/${id}/retry-failed`);
+      showToast('Failed emails reset — resending now!', 'success');
+      this.showDetails(id);
+    } catch(e) { showToast('Retry failed: ' + e.message, 'error'); }
+  },
+
+  async resetStuck(id) {
+    if (!confirm('Reset this stuck campaign back to "draft" so you can send it again?\n\nOnly use this if the campaign is frozen at 0 emails sent (usually after a server restart).')) return;
+    try {
+      await API.post(`/api/campaigns/${id}/reset-stuck`);
+      showToast('Campaign reset to draft — click Send Now to restart it.', 'success');
+      this.showDetails(id);
+    } catch(e) { showToast('Reset failed: ' + e.message, 'error'); }
   },
 
   async remove(id) {
