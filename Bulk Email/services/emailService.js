@@ -15,15 +15,19 @@ function getOAuth2Client() {
 
 async function createTransport(account) {
   if (account.refresh_token === 'app_password') {
+    // App Passwords can only use SMTP — will fail on hosts that block port 465/587
     return nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: { user: account.email, pass: account.access_token },
+      connectionTimeout: 15000,
+      socketTimeout: 15000,
       tls: { rejectUnauthorized: false }
     });
   }
 
+  // OAuth2 accounts: Use Gmail REST API (HTTPS, port 443) to bypass SMTP port blocks
   const oauth2Client = getOAuth2Client();
   oauth2Client.setCredentials({
     access_token: account.access_token,
@@ -44,20 +48,42 @@ async function createTransport(account) {
   db.prepare('UPDATE accounts SET access_token = ?, token_expiry = ? WHERE id = ?')
     .run(credentials.access_token, credentials.expiry_date, account.id);
 
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      type: 'OAuth2',
-      user: account.email,
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      refreshToken: account.refresh_token,
-      accessToken: credentials.access_token
-    },
-    tls: { rejectUnauthorized: false }
-  });
+  // Update the client with fresh credentials
+  oauth2Client.setCredentials(credentials);
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const MailComposer = require('nodemailer/lib/mail-composer');
+
+  // Return a transporter-like object that uses Gmail REST API
+  return {
+    sendMail: async (mailOptions) => {
+      const composer = new MailComposer(mailOptions);
+      const message = await composer.compile().build();
+
+      const encodedMessage = Buffer.from(message)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const res = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: encodedMessage }
+      });
+
+      // Extract the Message-ID header from the sent message for threading
+      let messageId = null;
+      try {
+        const sent = await gmail.users.messages.get({ userId: 'me', id: res.data.id, format: 'metadata', metadataHeaders: ['Message-Id'] });
+        const header = sent.data.payload.headers.find(h => h.name.toLowerCase() === 'message-id');
+        if (header) messageId = header.value;
+      } catch (e) { /* ignore — threading still works without it */ }
+
+      return {
+        messageId: messageId || res.data.id,
+        response: `Gmail API: ${res.data.id}`
+      };
+    }
+  };
 }
 
 function pauseCampaign(campaignId) {
