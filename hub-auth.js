@@ -53,7 +53,7 @@ router.get('/auth/google', (req, res) => {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    prompt: 'consent',
+    prompt: 'select_account consent',
     state: 'hub_login'
   });
   res.redirect(authUrl);
