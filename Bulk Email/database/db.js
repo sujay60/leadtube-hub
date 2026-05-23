@@ -320,6 +320,7 @@ async function initDatabase() {
     "ALTER TABLE campaign_emails ADD COLUMN message_id TEXT",
     "ALTER TABLE campaign_emails ADD COLUMN replied_at DATETIME",
     "ALTER TABLE campaign_emails ADD COLUMN is_paused INTEGER DEFAULT 0",
+    "ALTER TABLE campaign_emails ADD COLUMN account_id INTEGER",
     "ALTER TABLE accounts ADD COLUMN user_id INTEGER",
     "ALTER TABLE templates ADD COLUMN user_id INTEGER",
     "ALTER TABLE contact_groups ADD COLUMN user_id INTEGER",

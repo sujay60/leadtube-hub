@@ -177,6 +177,31 @@ function getOriginalMessageId(db, campaign, contactId) {
   return originalEmail ? originalEmail.message_id : null;
 }
 
+// Find the original email's account_id to enforce same-account follow-ups
+function getOriginalAccountId(db, campaign, contactId) {
+  if (!campaign.follow_up_of) return null;
+
+  // Walk up the follow-up chain to find the root campaign
+  let parentId = campaign.follow_up_of;
+  let visited = new Set();
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = db.prepare('SELECT follow_up_of FROM campaigns WHERE id = ?').get(parentId);
+    if (parent && parent.follow_up_of) {
+      parentId = parent.follow_up_of;
+    } else {
+      break;
+    }
+  }
+
+  // Find the original email sent to this contact in the root campaign
+  const originalEmail = db.prepare(
+    "SELECT account_id FROM campaign_emails WHERE campaign_id = ? AND contact_id = ? AND account_id IS NOT NULL"
+  ).get(parentId, contactId);
+
+  return originalEmail ? originalEmail.account_id : null;
+}
+
 async function sendCampaignEmails(campaignId) {
   const db = getDb();
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
@@ -232,10 +257,36 @@ async function sendCampaignEmails(campaignId) {
     const current = db.prepare('SELECT status FROM campaigns WHERE id = ?').get(campaignId);
     if (!current || current.status === 'cancelled') break;
 
-    // Round-robin account selection
-    const accIndex = i % accounts.length;
-    const account = accounts[accIndex];
-    const transporter = transporters[accIndex];
+    // Determine which account to use
+    let account = null;
+    let transporter = null;
+
+    if (isFollowUp) {
+      const origAccountId = getOriginalAccountId(db, campaign, record.contact_id);
+      if (origAccountId) {
+        // Find the matching account and transporter
+        const idx = accounts.findIndex(a => a.id === origAccountId);
+        if (idx !== -1) {
+          account = accounts[idx];
+          transporter = transporters[idx];
+        }
+      }
+    }
+
+    if (!account) {
+      if (isFollowUp) {
+        // Skip this contact because original account is disconnected or removed
+        console.error(`  ⏭ Skipped follow-up for ${record.email}: Original account disconnected or not available`);
+        db.prepare("UPDATE campaign_emails SET status = 'failed', error_message = ? WHERE id = ?").run('Original account disconnected or removed', record.id);
+        db.prepare("UPDATE campaigns SET failed_count = failed_count + 1 WHERE id = ?").run(campaignId);
+        continue;
+      } else {
+        // Round-robin account selection for normal campaigns
+        const accIndex = i % accounts.length;
+        account = accounts[accIndex];
+        transporter = transporters[accIndex];
+      }
+    }
 
     try {
       const contact = {
@@ -283,7 +334,7 @@ async function sendCampaignEmails(campaignId) {
 
       // Store the Message-ID for future follow-up threading
       const messageId = info.messageId || null;
-      db.prepare("UPDATE campaign_emails SET status = 'sent', sent_at = CURRENT_TIMESTAMP, message_id = ? WHERE id = ?").run(messageId, record.id);
+      db.prepare("UPDATE campaign_emails SET status = 'sent', sent_at = CURRENT_TIMESTAMP, message_id = ?, account_id = ? WHERE id = ?").run(messageId, account.id, record.id);
       db.prepare("UPDATE campaigns SET sent_count = sent_count + 1 WHERE id = ?").run(campaignId);
     } catch (error) {
       console.error(`Failed to send to ${record.email} via ${account.email}:`, error.message);
