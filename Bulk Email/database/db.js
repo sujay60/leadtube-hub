@@ -1,109 +1,32 @@
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'mailblast.db');
-let dbWrapper = null;
-
-/** Wrapper around sql.js to provide a better-sqlite3-like API */
-class DbWrapper {
-  constructor(sqlDb) {
-    this.db = sqlDb;
-    this._inTransaction = false;
-  }
-
-  prepare(sql) {
-    const db = this.db;
-    const self = this;
-    return {
-      run(...params) {
-        db.run(sql, params);
-        const rid = db.exec("SELECT last_insert_rowid()");
-        const result = {
-          lastInsertRowid: rid.length ? rid[0].values[0][0] : 0,
-          changes: db.getRowsModified()
-        };
-        if (!self._inTransaction) self._save();
-        return result;
-      },
-      get(...params) {
-        let result = null;
-        try {
-          const stmt = db.prepare(sql);
-          if (params.length) stmt.bind(params);
-          if (stmt.step()) result = stmt.getAsObject();
-          stmt.free();
-        } catch (e) {
-          console.error('DB get error:', e.message, sql);
-        }
-        return result;
-      },
-      all(...params) {
-        const results = [];
-        try {
-          const stmt = db.prepare(sql);
-          if (params.length) stmt.bind(params);
-          while (stmt.step()) results.push(stmt.getAsObject());
-          stmt.free();
-        } catch (e) {
-          console.error('DB all error:', e.message, sql);
-        }
-        return results;
-      }
-    };
-  }
-
-  exec(sql) {
-    this.db.exec(sql);
-    if (!this._inTransaction) this._save();
-  }
-
-  pragma(str) {
-    try { this.db.exec(`PRAGMA ${str}`); } catch(e) {}
-  }
-
-  transaction(fn) {
-    const self = this;
-    return (...args) => {
-      self._inTransaction = true;
-      self.db.exec("BEGIN TRANSACTION");
-      try {
-        fn(...args);
-        self.db.exec("COMMIT");
-        self._inTransaction = false;
-        self._save();
-      } catch (e) {
-        self._inTransaction = false;
-        try { self.db.exec("ROLLBACK"); } catch(re) {}
-        throw e;
-      }
-    };
-  }
-
-  _save() {
-    try {
-      const data = this.db.export();
-      fs.writeFileSync(DB_PATH, Buffer.from(data));
-    } catch (e) { /* silent */ }
-  }
-}
+let db = null;
 
 async function initDatabase() {
-  const SQL = await initSqlJs();
+  // Ensure the directory exists
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  let db;
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
-  }
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
-  dbWrapper = new DbWrapper(db);
-  dbWrapper.pragma('journal_mode = WAL');
-  dbWrapper.pragma('foreign_keys = ON');
+  // Add all() and get() fallbacks just in case there are subtle differences
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = (sql) => {
+    const stmt = originalPrepare(sql);
+    const originalGet = stmt.get.bind(stmt);
+    stmt.get = (...args) => {
+      const result = originalGet(...args);
+      return result === undefined ? null : result;
+    };
+    return stmt;
+  };
 
-  dbWrapper.exec(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
@@ -329,14 +252,14 @@ async function initDatabase() {
     "ALTER TABLE replies ADD COLUMN user_id INTEGER"
   ];
   for (const sql of migrations) {
-    try { dbWrapper.db.exec(sql); } catch(e) { /* column or table update already applied */ }
+    try { db.exec(sql); } catch(e) { /* column or table update already applied */ }
   }
 
   // Insert default custom fields
   try {
-    const existing = dbWrapper.prepare('SELECT COUNT(*) as cnt FROM custom_fields').get();
+    const existing = db.prepare('SELECT COUNT(*) as cnt FROM custom_fields').get();
     if (!existing || existing.cnt === 0) {
-      dbWrapper.exec(`
+      db.exec(`
         INSERT OR IGNORE INTO custom_fields (field_name, field_label, field_type) VALUES ('instagram', 'Instagram Handle', 'text');
         INSERT OR IGNORE INTO custom_fields (field_name, field_label, field_type) VALUES ('twitter', 'Twitter/X Handle', 'text');
         INSERT OR IGNORE INTO custom_fields (field_name, field_label, field_type) VALUES ('content_type', 'Content Type', 'text');
@@ -346,12 +269,12 @@ async function initDatabase() {
     }
   } catch(e) {}
 
-  console.log('  ✅ Database initialized');
+  console.log('  ✅ Database initialized (better-sqlite3)');
 }
 
 function getDb() {
-  if (!dbWrapper) throw new Error('Database not initialized. Call initDatabase() first.');
-  return dbWrapper;
+  if (!db) throw new Error('Database not initialized. Call initDatabase() first.');
+  return db;
 }
 
 module.exports = { getDb, initDatabase };
