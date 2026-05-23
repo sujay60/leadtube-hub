@@ -106,6 +106,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         updateSessionStat();
+
+        // Load Active Session
+        try {
+            const activeRes = await fetch('/hub/extractor/active');
+            if (activeRes.ok) {
+                const activeSession = await activeRes.json();
+                if (activeSession && activeSession.id) {
+                    loadSession(activeSession);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load active session from DB:', e);
+        }
         
         // Wait for Extension Ping
         setTimeout(() => {
@@ -671,6 +684,15 @@ Strict Guidelines:
         } catch (e) {
             console.error('Failed to save history session to DB:', e);
         }
+
+        // Save to active workspace
+        try {
+            await fetch('/hub/extractor/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sessionData)
+            });
+        } catch (e) {}
     }
 
     async function renderHistory() {
@@ -881,6 +903,8 @@ Strict Guidelines:
             queueContainer.style.display = 'none';
             btnExport.style.display = 'none';
             statTotal.textContent = '0';
+            
+            fetch('/hub/extractor/active', { method: 'DELETE' }).catch(() => {});
             
             renderQueue();
             checkStartButton();

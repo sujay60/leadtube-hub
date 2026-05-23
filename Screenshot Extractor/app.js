@@ -521,6 +521,14 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
     }
 
     // ── Table ──
+    function syncActiveLeads() {
+        fetch('/hub/screenshot/active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(extractedData)
+        }).catch(() => {});
+    }
+
     function addResultToTable(data) {
         const handle = data.handle || 'N/A';
         const link = (handle !== 'N/A' && handle !== '—' && handle.startsWith('@')) ? `https://youtube.com/${handle}` : '';
@@ -540,15 +548,16 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         `;
         const idx = extractedData.length - 1;
         const cells = tr.querySelectorAll('.editable');
-        cells[0].addEventListener('blur', () => { extractedData[idx].channelName = cells[0].textContent.trim(); });
+        cells[0].addEventListener('blur', () => { extractedData[idx].channelName = cells[0].textContent.trim(); syncActiveLeads(); });
         cells[1].addEventListener('blur', () => {
             const h = cells[1].textContent.trim();
             extractedData[idx].handle = h;
             const lc = tr.querySelector('td:last-child');
             if (h.startsWith('@')) { extractedData[idx].link = `https://youtube.com/${h}`; lc.innerHTML = `<a href="https://youtube.com/${h}" target="_blank">${h}</a>`; }
+            syncActiveLeads();
         });
-        cells[2].addEventListener('blur', () => { extractedData[idx].subscribers = cells[2].textContent.trim(); });
-        cells[3].addEventListener('blur', () => { extractedData[idx].lastUpload = cells[3].textContent.trim(); });
+        cells[2].addEventListener('blur', () => { extractedData[idx].subscribers = cells[2].textContent.trim(); syncActiveLeads(); });
+        cells[3].addEventListener('blur', () => { extractedData[idx].lastUpload = cells[3].textContent.trim(); syncActiveLeads(); });
 
         const emptyMsg = resultsBody.querySelector('.empty-state');
         if (emptyMsg) emptyMsg.remove();
@@ -557,6 +566,8 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         exportBtn.disabled = false;
         clearBtn.disabled = false;
         if (saveSessionBtn) saveSessionBtn.disabled = false;
+        
+        syncActiveLeads();
     }
 
     // ── Controls ──
@@ -570,6 +581,8 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         exportBtn.disabled = true;
         clearBtn.disabled = true;
         ocrPreview.style.display = 'none';
+        
+        fetch('/hub/screenshot/active', { method: 'DELETE' }).catch(() => {});
     });
 
     exportBtn.addEventListener('click', () => {
@@ -818,4 +831,21 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
 
     // Init history badge count
     updateHistoryBadge();
+
+    async function initActiveLeads() {
+        try {
+            const res = await fetch('/hub/screenshot/active');
+            if (res.ok) {
+                const activeLeads = await res.json();
+                if (activeLeads && activeLeads.length > 0) {
+                    extractedData = [];
+                    resultsBody.innerHTML = '';
+                    activeLeads.forEach(row => addResultToTable(row));
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load active leads from server:', e);
+        }
+    }
+    initActiveLeads();
 });

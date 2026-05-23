@@ -286,6 +286,26 @@ async function initDatabase() {
       keys_data TEXT,
       FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS hub_sessions (
+      sid TEXT PRIMARY KEY,
+      expired DATETIME NOT NULL,
+      sess TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS hub_creator_research_active (
+      user_id INTEGER PRIMARY KEY,
+      session_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_extractor_active (
+      user_id INTEGER PRIMARY KEY,
+      session_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS hub_screenshot_active (
+      user_id INTEGER PRIMARY KEY,
+      leads_data TEXT,
+      FOREIGN KEY (user_id) REFERENCES hub_users(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrations — add new columns if they don't exist
@@ -299,10 +319,16 @@ async function initDatabase() {
     "ALTER TABLE campaigns ADD COLUMN scheduled_send_at DATETIME",
     "ALTER TABLE campaign_emails ADD COLUMN message_id TEXT",
     "ALTER TABLE campaign_emails ADD COLUMN replied_at DATETIME",
-    "ALTER TABLE campaign_emails ADD COLUMN is_paused INTEGER DEFAULT 0"
+    "ALTER TABLE campaign_emails ADD COLUMN is_paused INTEGER DEFAULT 0",
+    "ALTER TABLE accounts ADD COLUMN user_id INTEGER",
+    "ALTER TABLE templates ADD COLUMN user_id INTEGER",
+    "ALTER TABLE contact_groups ADD COLUMN user_id INTEGER",
+    "ALTER TABLE contacts ADD COLUMN user_id INTEGER",
+    "ALTER TABLE campaigns ADD COLUMN user_id INTEGER",
+    "ALTER TABLE replies ADD COLUMN user_id INTEGER"
   ];
   for (const sql of migrations) {
-    try { dbWrapper.db.exec(sql); } catch(e) { /* column already exists */ }
+    try { dbWrapper.db.exec(sql); } catch(e) { /* column or table update already applied */ }
   }
 
   // Insert default custom fields

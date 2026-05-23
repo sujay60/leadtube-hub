@@ -349,13 +349,13 @@ async function createFollowUp(parentCampaignId, templateId, condition, delayDays
     const scheduledStr = scheduledAt.toISOString().slice(0, 19).replace('T', ' ');
 
     const result = db.prepare(`
-      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, scheduled_send_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)
+      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, scheduled_send_at, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
     `).run(
       `Follow-up #${stepCount}: ${rootName}`,
       templateId, parent.group_id, parent.account_id, contacts.length,
       parent.delay_ms || 2000, parentCampaignId, delayDays || 1, condition,
-      parent.account_ids || '[]', scheduledStr
+      parent.account_ids || '[]', scheduledStr, parent.user_id
     );
 
     for (const c of contacts) {
@@ -366,13 +366,13 @@ async function createFollowUp(parentCampaignId, templateId, condition, delayDays
     return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
   } else {
     const result = db.prepare(`
-      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status)
-      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft')
+      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id)
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?)
     `).run(
       `Follow-up #${stepCount}: ${rootName}`,
       templateId, parent.group_id, parent.account_id,
       parent.delay_ms || 2000, parentCampaignId, delayDays || 1, condition,
-      parent.account_ids || '[]'
+      parent.account_ids || '[]', parent.user_id
     );
     return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
   }

@@ -30,13 +30,15 @@ const upload = multer({ storage, fileFilter: (req, file, cb) => {
 // List all groups
 router.get('/groups', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const groups = db.prepare(`
     SELECT cg.*, COUNT(c.id) as contact_count 
     FROM contact_groups cg 
     LEFT JOIN contacts c ON c.group_id = cg.id 
+    WHERE cg.user_id = ?
     GROUP BY cg.id 
     ORDER BY cg.created_at DESC
-  `).all();
+  `).all(userId);
   res.json(groups);
 });
 
@@ -46,7 +48,8 @@ router.post('/groups', (req, res) => {
   if (!name) return res.status(400).json({ error: 'Group name is required' });
   
   const db = getDb();
-  const result = db.prepare('INSERT INTO contact_groups (name, description) VALUES (?, ?)').run(name, description || '');
+  const userId = req.session && req.session.userId;
+  const result = db.prepare('INSERT INTO contact_groups (name, description, user_id) VALUES (?, ?, ?)').run(name, description || '', userId);
   const group = db.prepare('SELECT * FROM contact_groups WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(group);
 });
@@ -54,8 +57,9 @@ router.post('/groups', (req, res) => {
 // Delete group
 router.delete('/groups/:id', (req, res) => {
   const db = getDb();
-  db.prepare('UPDATE contacts SET group_id = NULL WHERE group_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM contact_groups WHERE id = ?').run(req.params.id);
+  const userId = req.session && req.session.userId;
+  db.prepare('UPDATE contacts SET group_id = NULL WHERE group_id = ? AND user_id = ?').run(req.params.id, userId);
+  db.prepare('DELETE FROM contact_groups WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
 
@@ -96,18 +100,19 @@ router.delete('/fields/:id', (req, res) => {
 // List contacts (optionally by group)
 router.get('/', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const { group_id, search } = req.query;
   
-  let query = 'SELECT c.*, cg.name as group_name FROM contacts c LEFT JOIN contact_groups cg ON c.group_id = cg.id';
-  const params = [];
+  let query = 'SELECT c.*, cg.name as group_name FROM contacts c LEFT JOIN contact_groups cg ON c.group_id = cg.id WHERE c.user_id = ?';
+  const params = [userId];
 
   if (group_id) {
-    query += ' WHERE c.group_id = ?';
+    query += ' AND c.group_id = ?';
     params.push(group_id);
   }
 
   if (search) {
-    query += (group_id ? ' AND' : ' WHERE') + ' (c.email LIKE ? OR c.first_name LIKE ? OR c.channel_name LIKE ?)';
+    query += ' AND (c.email LIKE ? OR c.first_name LIKE ? OR c.channel_name LIKE ?)';
     const s = `%${search}%`;
     params.push(s, s, s);
   }
@@ -120,7 +125,8 @@ router.get('/', (req, res) => {
 // Get single contact
 router.get('/:id', (req, res) => {
   const db = getDb();
-  const contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(req.params.id);
+  const userId = req.session && req.session.userId;
+  const contact = db.prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   if (!contact) return res.status(404).json({ error: 'Contact not found' });
   res.json(contact);
 });
@@ -131,10 +137,11 @@ router.post('/', (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const result = db.prepare(`
-    INSERT INTO contacts (email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(email, first_name || '', last_name || '', channel_name || '', channel_url || '', subscriber_count || '', niche || '', country || '', language || 'English', group_id || null, JSON.stringify(custom_fields || {}));
+    INSERT INTO contacts (email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(email, first_name || '', last_name || '', channel_name || '', channel_url || '', subscriber_count || '', niche || '', country || '', language || 'English', group_id || null, JSON.stringify(custom_fields || {}), userId);
 
   const contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(contact);
@@ -145,20 +152,22 @@ router.put('/:id', (req, res) => {
   const { email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields } = req.body;
 
   const db = getDb();
+  const userId = req.session && req.session.userId;
   db.prepare(`
     UPDATE contacts SET email = ?, first_name = ?, last_name = ?, channel_name = ?, channel_url = ?,
     subscriber_count = ?, niche = ?, country = ?, language = ?, group_id = ?, custom_fields = ?
-    WHERE id = ?
-  `).run(email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id || null, JSON.stringify(custom_fields || {}), req.params.id);
+    WHERE id = ? AND user_id = ?
+  `).run(email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id || null, JSON.stringify(custom_fields || {}), req.params.id, userId);
 
-  const contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(req.params.id);
+  const contact = db.prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   res.json(contact);
 });
 
 // Delete contact
 router.delete('/:id', (req, res) => {
   const db = getDb();
-  db.prepare('DELETE FROM contacts WHERE id = ?').run(req.params.id);
+  const userId = req.session && req.session.userId;
+  db.prepare('DELETE FROM contacts WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
 
@@ -168,8 +177,9 @@ router.post('/bulk-delete', (req, res) => {
   if (!ids || !ids.length) return res.status(400).json({ error: 'No contact IDs provided' });
 
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const placeholders = ids.map(() => '?').join(',');
-  db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders})`).run(...ids);
+  db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders}) AND user_id = ?`).run(...ids, userId);
   res.json({ success: true, deleted: ids.length });
 });
 
@@ -211,6 +221,7 @@ router.post('/import', upload.single('csv'), async (req, res) => {
     const groupId = req.body.group_id;
 
     const db = getDb();
+    const userId = req.session && req.session.userId;
 
     let imported = 0;
     let skipped = 0;
@@ -229,12 +240,12 @@ router.post('/import', upload.single('csv'), async (req, res) => {
       }
 
       try {
-        const existing = db.prepare('SELECT id FROM contacts WHERE email = ? AND group_id = ?').get(email, groupId || null);
+        const existing = db.prepare('SELECT id FROM contacts WHERE email = ? AND group_id = ? AND user_id = ?').get(email, groupId || null, userId);
         if (existing) { skipped++; continue; }
 
         db.prepare(`
-          INSERT INTO contacts (email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO contacts (email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields, user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           email,
           row[mapping.first_name] || '',
@@ -246,7 +257,8 @@ router.post('/import', upload.single('csv'), async (req, res) => {
           row[mapping.country] || '',
           row[mapping.language] || 'English',
           groupId || null,
-          JSON.stringify(customFields)
+          JSON.stringify(customFields),
+          userId
         );
         imported++;
       } catch (e) {

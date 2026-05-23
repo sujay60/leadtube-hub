@@ -460,4 +460,94 @@ router.post('/cf/yt_keys', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Creator Research Active Session Endpoints ──
+
+router.get('/creator-research/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const result = db.prepare('SELECT session_data FROM hub_creator_research_active WHERE user_id = ?').get(req.session.userId);
+  if (!result || !result.session_data) return res.json(null);
+  try { res.json(JSON.parse(result.session_data)); } catch(e) { res.json(null); }
+});
+
+router.post('/creator-research/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const sessionData = JSON.stringify(req.body || {});
+  const existing = db.prepare('SELECT user_id FROM hub_creator_research_active WHERE user_id = ?').get(req.session.userId);
+  if (existing) {
+    db.prepare('UPDATE hub_creator_research_active SET session_data = ? WHERE user_id = ?').run(sessionData, req.session.userId);
+  } else {
+    db.prepare('INSERT INTO hub_creator_research_active (user_id, session_data) VALUES (?, ?)').run(req.session.userId, sessionData);
+  }
+  res.json({ success: true });
+});
+
+router.delete('/creator-research/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  db.prepare('DELETE FROM hub_creator_research_active WHERE user_id = ?').run(req.session.userId);
+  res.json({ success: true });
+});
+
+// ── Email Extractor Active Session Endpoints ──
+
+router.get('/extractor/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const result = db.prepare('SELECT session_data FROM hub_extractor_active WHERE user_id = ?').get(req.session.userId);
+  if (!result || !result.session_data) return res.json(null);
+  try { res.json(JSON.parse(result.session_data)); } catch(e) { res.json(null); }
+});
+
+router.post('/extractor/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const sessionData = JSON.stringify(req.body || {});
+  const existing = db.prepare('SELECT user_id FROM hub_extractor_active WHERE user_id = ?').get(req.session.userId);
+  if (existing) {
+    db.prepare('UPDATE hub_extractor_active SET session_data = ? WHERE user_id = ?').run(sessionData, req.session.userId);
+  } else {
+    db.prepare('INSERT INTO hub_extractor_active (user_id, session_data) VALUES (?, ?)').run(req.session.userId, sessionData);
+  }
+  res.json({ success: true });
+});
+
+router.delete('/extractor/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  db.prepare('DELETE FROM hub_extractor_active WHERE user_id = ?').run(req.session.userId);
+  res.json({ success: true });
+});
+
+// ── Screenshot Extractor Active Leads Endpoints ──
+
+router.get('/screenshot/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const result = db.prepare('SELECT leads_data FROM hub_screenshot_active WHERE user_id = ?').get(req.session.userId);
+  if (!result || !result.leads_data) return res.json(null);
+  try { res.json(JSON.parse(result.leads_data)); } catch(e) { res.json(null); }
+});
+
+router.post('/screenshot/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  const leadsData = JSON.stringify(req.body || []);
+  const existing = db.prepare('SELECT user_id FROM hub_screenshot_active WHERE user_id = ?').get(req.session.userId);
+  if (existing) {
+    db.prepare('UPDATE hub_screenshot_active SET leads_data = ? WHERE user_id = ?').run(leadsData, req.session.userId);
+  } else {
+    db.prepare('INSERT INTO hub_screenshot_active (user_id, leads_data) VALUES (?, ?)').run(req.session.userId, leadsData);
+  }
+  res.json({ success: true });
+});
+
+router.delete('/screenshot/active', (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
+  const db = getDb();
+  db.prepare('DELETE FROM hub_screenshot_active WHERE user_id = ?').run(req.session.userId);
+  res.json({ success: true });
+});
+
 module.exports = router;

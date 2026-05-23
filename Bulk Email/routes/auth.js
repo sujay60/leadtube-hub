@@ -46,18 +46,19 @@ router.post('/add-account', (req, res) => {
   }
 
   const db = getDb();
-  const existing = db.prepare('SELECT id FROM accounts WHERE email = ?').get(userEmail);
+  const userId = req.session && req.session.userId;
+  const existing = db.prepare('SELECT id FROM accounts WHERE email = ? AND (user_id = ? OR user_id IS NULL)').get(userEmail, userId);
 
   if (existing) {
-    db.prepare(`UPDATE accounts SET access_token = ?, refresh_token = 'app_password', display_name = ? WHERE email = ?`)
-      .run(userPassword, userEmail.split('@')[0], userEmail);
+    db.prepare(`UPDATE accounts SET access_token = ?, refresh_token = 'app_password', display_name = ?, user_id = ? WHERE id = ?`)
+      .run(userPassword, userEmail.split('@')[0], userId, existing.id);
   } else {
-    db.prepare(`INSERT INTO accounts (email, display_name, picture_url, access_token, refresh_token, token_expiry)
-      VALUES (?, ?, '', ?, 'app_password', 0)`)
-      .run(userEmail, userEmail.split('@')[0], userPassword);
+    db.prepare(`INSERT INTO accounts (email, display_name, picture_url, access_token, refresh_token, token_expiry, user_id)
+      VALUES (?, ?, '', ?, 'app_password', 0, ?)`)
+      .run(userEmail, userEmail.split('@')[0], userPassword, userId);
   }
 
-  const account = db.prepare('SELECT id, email, display_name, picture_url, created_at FROM accounts WHERE email = ?').get(userEmail);
+  const account = db.prepare('SELECT id, email, display_name, picture_url, created_at FROM accounts WHERE email = ? AND user_id = ?').get(userEmail, userId);
   res.json(account);
 });
 
@@ -152,16 +153,17 @@ router.get('/google/callback', async (req, res) => {
     }
 
     const db = getDb();
-    const existing = db.prepare('SELECT id FROM accounts WHERE email = ?').get(profile.email);
+    const userId = req.session && req.session.userId;
+    const existing = db.prepare('SELECT id FROM accounts WHERE email = ? AND (user_id = ? OR user_id IS NULL)').get(profile.email, userId);
 
     if (existing) {
       db.prepare(`UPDATE accounts SET access_token = ?, refresh_token = COALESCE(?, refresh_token),
-            token_expiry = ?, display_name = ?, picture_url = ? WHERE email = ?`)
-        .run(tokens.access_token, tokens.refresh_token, tokens.expiry_date, profile.name, profile.picture, profile.email);
+            token_expiry = ?, display_name = ?, picture_url = ?, user_id = ? WHERE id = ?`)
+        .run(tokens.access_token, tokens.refresh_token, tokens.expiry_date, profile.name, profile.picture, userId, existing.id);
     } else {
-      db.prepare(`INSERT INTO accounts (email, display_name, picture_url, access_token, refresh_token, token_expiry)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(profile.email, profile.name, profile.picture, tokens.access_token, tokens.refresh_token || '', tokens.expiry_date);
+      db.prepare(`INSERT INTO accounts (email, display_name, picture_url, access_token, refresh_token, token_expiry, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(profile.email, profile.name, profile.picture, tokens.access_token, tokens.refresh_token || '', tokens.expiry_date, userId);
     }
 
     req.session.authenticated = true;
@@ -176,14 +178,16 @@ router.get('/google/callback', async (req, res) => {
 // List connected accounts
 router.get('/accounts', (req, res) => {
   const db = getDb();
-  const accounts = db.prepare('SELECT id, email, display_name, picture_url, created_at FROM accounts').all();
+  const userId = req.session && req.session.userId;
+  const accounts = db.prepare('SELECT id, email, display_name, picture_url, created_at FROM accounts WHERE user_id = ?').all(userId);
   res.json(accounts);
 });
 
 // Delete account
 router.delete('/accounts/:id', (req, res) => {
   const db = getDb();
-  db.prepare('DELETE FROM accounts WHERE id = ?').run(req.params.id);
+  const userId = req.session && req.session.userId;
+  db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
 

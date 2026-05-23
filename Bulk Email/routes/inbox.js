@@ -16,6 +16,7 @@ function getOAuth2Client() {
 // Get all replies grouped by thread/contact
 router.get('/', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const replies = db.prepare(`
     SELECT r.*, c.first_name, c.last_name, c.email as contact_email, a.email as account_email, camp.name as campaign_name,
            (SELECT ce.is_paused FROM campaign_emails ce WHERE ce.campaign_id = r.campaign_id AND ce.contact_id = r.contact_id LIMIT 1) as is_paused
@@ -23,15 +24,17 @@ router.get('/', (req, res) => {
     JOIN contacts c ON r.contact_id = c.id
     JOIN accounts a ON r.account_id = a.id
     JOIN campaigns camp ON r.campaign_id = camp.id
+    WHERE r.user_id = ?
     ORDER BY r.received_at DESC
-  `).all();
+  `).all(userId);
   res.json(replies);
 });
 
 // Mark reply as read
 router.post('/:id/read', (req, res) => {
   const db = getDb();
-  db.prepare('UPDATE replies SET is_read = 1 WHERE id = ?').run(req.params.id);
+  const userId = req.session && req.session.userId;
+  db.prepare('UPDATE replies SET is_read = 1 WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
 
@@ -117,9 +120,9 @@ router.post('/reply', async (req, res) => {
     
     // Log our sent manual reply to the replies table to keep the thread history visible (optional but nice)
     db.prepare(`
-      INSERT INTO replies (account_id, contact_id, campaign_id, message_id, thread_id, subject, body_text, received_at, is_read)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
-    `).run(reply.account_id, reply.contact_id, reply.campaign_id, info.messageId, reply.thread_id, mailOptions.subject, `[You replied]:\n${text_body}`);
+      INSERT INTO replies (account_id, contact_id, campaign_id, message_id, thread_id, subject, body_text, received_at, is_read, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+    `).run(reply.account_id, reply.contact_id, reply.campaign_id, info.messageId, reply.thread_id, mailOptions.subject, `[You replied]:\n${text_body}`, req.session && req.session.userId);
 
     res.json({ success: true, messageId: info.messageId });
   } catch(e) {

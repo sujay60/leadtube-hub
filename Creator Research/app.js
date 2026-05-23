@@ -109,38 +109,62 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveSession() {
         if (csvRows.length === 0) {
             localStorage.removeItem('creator_research_active_session');
+            fetch('/hub/creator-research/active', { method: 'DELETE' }).catch(() => {});
             return;
         }
-        localStorage.setItem('creator_research_active_session', JSON.stringify({
+        const sessionPayload = {
             csvHeaders,
             csvRows,
             currentIndex,
             queue,
             timestamp: new Date().toLocaleString()
-        }));
+        };
+        localStorage.setItem('creator_research_active_session', JSON.stringify(sessionPayload));
+        fetch('/hub/creator-research/active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessionPayload)
+        }).catch(() => {});
     }
 
-    function checkSavedSession() {
-        const saved = localStorage.getItem('creator_research_active_session');
-        if (saved) {
-            try {
-                const session = JSON.parse(saved);
-                if (session.csvRows && session.csvRows.length > 0) {
-                    restoreText.textContent = `Found a saved session from ${session.timestamp} with ${session.csvRows.length} channels (Processed: ${session.currentIndex}/${session.queue.length}).`;
-                    restoreBanner.style.display = 'flex';
-                }
-            } catch(e) {
-                localStorage.removeItem('creator_research_active_session');
+    async function checkSavedSession() {
+        // Try server DB first, fall back to localStorage
+        let session = null;
+        try {
+            const res = await fetch('/hub/creator-research/active');
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.csvRows && data.csvRows.length > 0) session = data;
             }
+        } catch(e) {}
+        if (!session) {
+            const saved = localStorage.getItem('creator_research_active_session');
+            if (saved) {
+                try { session = JSON.parse(saved); } catch(e) { localStorage.removeItem('creator_research_active_session'); }
+            }
+        }
+        if (session && session.csvRows && session.csvRows.length > 0) {
+            restoreText.textContent = `Found a saved session from ${session.timestamp} with ${session.csvRows.length} channels (Processed: ${session.currentIndex}/${session.queue.length}).`;
+            restoreBanner.style.display = 'flex';
         }
     }
 
     if (btnRestore) {
-        btnRestore.addEventListener('click', () => {
-            const saved = localStorage.getItem('creator_research_active_session');
-            if (saved) {
+        btnRestore.addEventListener('click', async () => {
+            let session = null;
+            try {
+                const res = await fetch('/hub/creator-research/active');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.csvRows && data.csvRows.length > 0) session = data;
+                }
+            } catch(e) {}
+            if (!session) {
+                const saved = localStorage.getItem('creator_research_active_session');
+                if (saved) try { session = JSON.parse(saved); } catch(e) {}
+            }
+            if (session) {
                 try {
-                    const session = JSON.parse(saved);
                     csvHeaders = session.csvHeaders || [];
                     csvRows = session.csvRows || [];
                     currentIndex = session.currentIndex || 0;
@@ -184,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnDiscard.addEventListener('click', () => {
             if (confirm('Are you sure you want to discard your saved session? This cannot be undone.')) {
                 localStorage.removeItem('creator_research_active_session');
+                fetch('/hub/creator-research/active', { method: 'DELETE' }).catch(() => {});
                 restoreBanner.style.display = 'none';
             }
         });

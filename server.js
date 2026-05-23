@@ -40,7 +40,60 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
+const Store = session.Store;
+class SqliteSessionStore extends Store {
+  constructor() {
+    super();
+  }
+  get(sid, callback) {
+    try {
+      const db = getDb();
+      const row = db.prepare('SELECT sess FROM hub_sessions WHERE sid = ? AND expired >= ?').get(sid, new Date().toISOString());
+      if (!row) return callback(null, null);
+      callback(null, JSON.parse(row.sess));
+    } catch (err) {
+      callback(err);
+    }
+  }
+  set(sid, sess, callback) {
+    try {
+      const db = getDb();
+      const expired = new Date(Date.now() + (sess.cookie.maxAge || 7 * 24 * 60 * 60 * 1000)).toISOString();
+      const sessStr = JSON.stringify(sess);
+      const existing = db.prepare('SELECT sid FROM hub_sessions WHERE sid = ?').get(sid);
+      if (existing) {
+        db.prepare('UPDATE hub_sessions SET expired = ?, sess = ? WHERE sid = ?').run(expired, sessStr, sid);
+      } else {
+        db.prepare('INSERT INTO hub_sessions (sid, expired, sess) VALUES (?, ?, ?)').run(sid, expired, sessStr);
+      }
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+  destroy(sid, callback) {
+    try {
+      const db = getDb();
+      db.prepare('DELETE FROM hub_sessions WHERE sid = ?').run(sid);
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+  touch(sid, sess, callback) {
+    try {
+      const db = getDb();
+      const expired = new Date(Date.now() + (sess.cookie.maxAge || 7 * 24 * 60 * 60 * 1000)).toISOString();
+      db.prepare('UPDATE hub_sessions SET expired = ? WHERE sid = ?').run(expired, sid);
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  }
+}
+
 app.use(session({
+  store: new SqliteSessionStore(),
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
@@ -70,14 +123,6 @@ app.use((req, res, next) => {
 
 // ── Hub Auth Routes (must be BEFORE the auth guard) ──
 app.use('/hub', hubAuthRoutes);
-
-// ── MailBlast API Routes ──
-app.use('/auth', authRoutes);
-app.use('/api/templates', templateRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/campaigns', campaignRoutes);
-app.use('/api/inbox', inboxRoutes);
-app.use('/t', trackingRoutes);
 
 // ── Creator Research Deep Intelligence Engine ──
 // Helper: fetch a URL with browser-like headers
@@ -569,6 +614,14 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// ── Protected MailBlast API Routes ──
+app.use('/auth', authRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/contacts', contactRoutes);
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/inbox', inboxRoutes);
+app.use('/t', trackingRoutes);
 
 // ── MailBlast Static Files (CSS & JS for the Bulk Email frontend) ──
 app.use('/css', express.static(path.join(__dirname, 'Bulk Email', 'public', 'css')));

@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const campaigns = db.prepare(`
     SELECT c.*, t.name as template_name, cg.name as group_name, a.email as sender_email,
            pc.name as parent_campaign_name
@@ -15,13 +16,15 @@ router.get('/', (req, res) => {
     LEFT JOIN contact_groups cg ON c.group_id = cg.id
     LEFT JOIN accounts a ON c.account_id = a.id
     LEFT JOIN campaigns pc ON c.follow_up_of = pc.id
+    WHERE c.user_id = ?
     ORDER BY c.created_at DESC
-  `).all();
+  `).all(userId);
   res.json(campaigns);
 });
 
 router.get('/:id', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const campaign = db.prepare(`
     SELECT c.*, t.name as template_name, t.subject as template_subject,
            cg.name as group_name, a.email as sender_email
@@ -29,8 +32,8 @@ router.get('/:id', (req, res) => {
     LEFT JOIN templates t ON c.template_id = t.id
     LEFT JOIN contact_groups cg ON c.group_id = cg.id
     LEFT JOIN accounts a ON c.account_id = a.id
-    WHERE c.id = ?
-  `).get(req.params.id);
+    WHERE c.id = ? AND c.user_id = ?
+  `).get(req.params.id, userId);
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
   const emails = db.prepare(`
@@ -87,9 +90,10 @@ router.get('/:id', (req, res) => {
 
 router.get('/:id/status', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const campaign = db.prepare(
-    'SELECT id, status, total_emails, sent_count, failed_count, opened_count, clicked_count, is_paused, delay_ms FROM campaigns WHERE id = ?'
-  ).get(req.params.id);
+    'SELECT id, status, total_emails, sent_count, failed_count, opened_count, clicked_count, is_paused, delay_ms FROM campaigns WHERE id = ? AND user_id = ?'
+  ).get(req.params.id, userId);
   if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
   res.json(campaign);
 });
@@ -104,19 +108,20 @@ router.post('/', (req, res) => {
   }
 
   const db = getDb();
+  const userId = req.session && req.session.userId;
   const rootNode = tree.find(n => n.parentId === null);
   if (!rootNode) return res.status(400).json({ error: 'Root node is missing' });
 
   // Create template for root
-  const rootTpl = db.prepare('INSERT INTO templates (name, subject, body_html, body_text) VALUES (?, ?, ?, ?)').run(
-    `Sequence: ${rootNode.subject.substring(0, 40)}`, rootNode.subject, (rootNode.body||'').replace(/\n/g, '<br>'), rootNode.body
+  const rootTpl = db.prepare('INSERT INTO templates (name, subject, body_html, body_text, user_id) VALUES (?, ?, ?, ?, ?)').run(
+    `Sequence: ${rootNode.subject.substring(0, 40)}`, rootNode.subject, (rootNode.body||'').replace(/\n/g, '<br>'), rootNode.body, userId
   );
 
-  const contactCount = db.prepare('SELECT COUNT(*) as count FROM contacts WHERE group_id = ?').get(group_id);
+  const contactCount = db.prepare('SELECT COUNT(*) as count FROM contacts WHERE group_id = ? AND user_id = ?').get(group_id, userId);
   const result = db.prepare(`
-    INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, account_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(name, rootTpl.lastInsertRowid, group_id, ids[0], contactCount.count, delay_ms || 2000, JSON.stringify(ids));
+    INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, account_ids, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, rootTpl.lastInsertRowid, group_id, ids[0], contactCount.count, delay_ms || 2000, JSON.stringify(ids), userId);
 
   const rootCampaignId = result.lastInsertRowid;
 
@@ -133,15 +138,15 @@ router.post('/', (req, res) => {
     let madeProgress = false;
     for (const node of tree) {
       if (!dbIds[node.id] && dbIds[node.parentId]) {
-        const tpl = db.prepare('INSERT INTO templates (name, subject, body_html, body_text) VALUES (?, ?, ?, ?)').run(
-          `Follow-up: ${node.subject.substring(0, 40)}`, node.subject, (node.body||'').replace(/\n/g, '<br>'), node.body
+        const tpl = db.prepare('INSERT INTO templates (name, subject, body_html, body_text, user_id) VALUES (?, ?, ?, ?, ?)').run(
+          `Follow-up: ${node.subject.substring(0, 40)}`, node.subject, (node.body||'').replace(/\n/g, '<br>'), node.body, userId
         );
         
         const fuResult = db.prepare(`
-          INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status)
-          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft')
+          INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?)
         `).run(
-          `Follow-up branch: ${name}`, tpl.lastInsertRowid, group_id, ids[0], delay_ms || 2000, dbIds[node.parentId], node.delay_days || 1, node.condition || 'not_opened', JSON.stringify(ids)
+          `Follow-up branch: ${name}`, tpl.lastInsertRowid, group_id, ids[0], delay_ms || 2000, dbIds[node.parentId], node.delay_days || 1, node.condition || 'not_opened', JSON.stringify(ids), userId
         );
         
         dbIds[node.id] = fuResult.lastInsertRowid;
@@ -279,7 +284,8 @@ router.post('/:id/preview', (req, res) => {
 // Diagnose email sending — test connectivity and return detailed errors
 router.post('/diagnose', async (req, res) => {
   const db = getDb();
-  const accounts = db.prepare('SELECT * FROM accounts').all();
+  const userId = req.session && req.session.userId;
+  const accounts = db.prepare('SELECT * FROM accounts WHERE user_id = ?').all(userId);
   
   if (!accounts.length) {
     return res.json({ 
@@ -378,8 +384,9 @@ router.post('/diagnose', async (req, res) => {
 // Delete campaign
 router.delete('/:id', (req, res) => {
   const db = getDb();
+  const userId = req.session && req.session.userId;
   db.prepare('DELETE FROM campaign_emails WHERE campaign_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM campaigns WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM campaigns WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
 

@@ -89,9 +89,9 @@ async function processReply(db, account, messageId, refIds, subject, body_text, 
       const threadId = sentRecord.campaign_id + '-' + sentRecord.contact_id;
 
       db.prepare(`
-        INSERT INTO replies (account_id, contact_id, campaign_id, message_id, thread_id, subject, body_text, body_html, received_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(account.id, sentRecord.contact_id, sentRecord.campaign_id, messageId, threadId, subject, body_text, body_html);
+        INSERT INTO replies (account_id, contact_id, campaign_id, message_id, thread_id, subject, body_text, body_html, received_at, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+      `).run(account.id, sentRecord.contact_id, sentRecord.campaign_id, messageId, threadId, subject, body_text, body_html, account.user_id);
 
       db.prepare('UPDATE campaign_emails SET replied_at = CURRENT_TIMESTAMP WHERE id = ?').run(sentRecord.id);
       
