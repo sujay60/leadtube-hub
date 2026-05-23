@@ -30,7 +30,7 @@ const upload = multer({ storage, fileFilter: (req, file, cb) => {
 // List all groups
 router.get('/groups', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const groups = db.prepare(`
     SELECT cg.*, COUNT(c.id) as contact_count 
     FROM contact_groups cg 
@@ -48,7 +48,7 @@ router.post('/groups', (req, res) => {
   if (!name) return res.status(400).json({ error: 'Group name is required' });
   
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const result = db.prepare('INSERT INTO contact_groups (name, description, user_id) VALUES (?, ?, ?)').run(name, description || '', userId);
   const group = db.prepare('SELECT * FROM contact_groups WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(group);
@@ -57,7 +57,7 @@ router.post('/groups', (req, res) => {
 // Delete group
 router.delete('/groups/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare('UPDATE contacts SET group_id = NULL WHERE group_id = ? AND user_id = ?').run(req.params.id, userId);
   db.prepare('DELETE FROM contact_groups WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
@@ -100,7 +100,7 @@ router.delete('/fields/:id', (req, res) => {
 // List contacts (optionally by group)
 router.get('/', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const { group_id, search } = req.query;
   
   let query = 'SELECT c.*, cg.name as group_name FROM contacts c LEFT JOIN contact_groups cg ON c.group_id = cg.id WHERE c.user_id = ?';
@@ -125,7 +125,7 @@ router.get('/', (req, res) => {
 // Get single contact
 router.get('/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const contact = db.prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?').get(req.params.id, userId);
   if (!contact) return res.status(404).json({ error: 'Contact not found' });
   res.json(contact);
@@ -137,7 +137,7 @@ router.post('/', (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const result = db.prepare(`
     INSERT INTO contacts (email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields, user_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -152,7 +152,7 @@ router.put('/:id', (req, res) => {
   const { email, first_name, last_name, channel_name, channel_url, subscriber_count, niche, country, language, group_id, custom_fields } = req.body;
 
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare(`
     UPDATE contacts SET email = ?, first_name = ?, last_name = ?, channel_name = ?, channel_url = ?,
     subscriber_count = ?, niche = ?, country = ?, language = ?, group_id = ?, custom_fields = ?
@@ -166,7 +166,7 @@ router.put('/:id', (req, res) => {
 // Delete contact
 router.delete('/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare('DELETE FROM contacts WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
@@ -177,7 +177,7 @@ router.post('/bulk-delete', (req, res) => {
   if (!ids || !ids.length) return res.status(400).json({ error: 'No contact IDs provided' });
 
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const placeholders = ids.map(() => '?').join(',');
   db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders}) AND user_id = ?`).run(...ids, userId);
   res.json({ success: true, deleted: ids.length });
@@ -221,7 +221,7 @@ router.post('/import', upload.single('csv'), async (req, res) => {
     const groupId = req.body.group_id;
 
     const db = getDb();
-    const userId = req.session && req.session.userId;
+    const userId = (req.session && req.session.userId) || null;
 
     let imported = 0;
     let skipped = 0;

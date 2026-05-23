@@ -46,7 +46,7 @@ router.post('/add-account', (req, res) => {
   }
 
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const existing = db.prepare('SELECT id FROM accounts WHERE email = ? AND (user_id = ? OR user_id IS NULL)').get(userEmail, userId);
 
   if (existing) {
@@ -153,7 +153,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     const db = getDb();
-    const userId = req.session && req.session.userId;
+    const userId = (req.session && req.session.userId) || null;
     const existing = db.prepare('SELECT id FROM accounts WHERE email = ? AND (user_id = ? OR user_id IS NULL)').get(profile.email, userId);
 
     if (existing) {
@@ -178,7 +178,7 @@ router.get('/google/callback', async (req, res) => {
 // List connected accounts
 router.get('/accounts', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const accounts = db.prepare('SELECT id, email, display_name, picture_url, created_at FROM accounts WHERE user_id = ?').all(userId);
   res.json(accounts);
 });
@@ -186,7 +186,7 @@ router.get('/accounts', (req, res) => {
 // Delete account
 router.delete('/accounts/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });

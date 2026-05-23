@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const campaigns = db.prepare(`
     SELECT c.*, t.name as template_name, cg.name as group_name, a.email as sender_email,
            pc.name as parent_campaign_name
@@ -24,7 +24,7 @@ router.get('/', (req, res) => {
 
 router.get('/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const campaign = db.prepare(`
     SELECT c.*, t.name as template_name, t.subject as template_subject,
            cg.name as group_name, a.email as sender_email
@@ -90,7 +90,7 @@ router.get('/:id', (req, res) => {
 
 router.get('/:id/status', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const campaign = db.prepare(
     'SELECT id, status, total_emails, sent_count, failed_count, opened_count, clicked_count, is_paused, delay_ms FROM campaigns WHERE id = ? AND user_id = ?'
   ).get(req.params.id, userId);
@@ -108,7 +108,7 @@ router.post('/', (req, res) => {
   }
 
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const rootNode = tree.find(n => n.parentId === null);
   if (!rootNode) return res.status(400).json({ error: 'Root node is missing' });
 
@@ -284,7 +284,7 @@ router.post('/:id/preview', (req, res) => {
 // Diagnose email sending — test connectivity and return detailed errors
 router.post('/diagnose', async (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const accounts = db.prepare('SELECT * FROM accounts WHERE user_id = ?').all(userId);
   
   if (!accounts.length) {
@@ -384,7 +384,7 @@ router.post('/diagnose', async (req, res) => {
 // Delete campaign
 router.delete('/:id', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare('DELETE FROM campaign_emails WHERE campaign_id = ?').run(req.params.id);
   db.prepare('DELETE FROM campaigns WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });

@@ -16,7 +16,7 @@ function getOAuth2Client() {
 // Get all replies grouped by thread/contact
 router.get('/', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   const replies = db.prepare(`
     SELECT r.*, c.first_name, c.last_name, c.email as contact_email, a.email as account_email, camp.name as campaign_name,
            (SELECT ce.is_paused FROM campaign_emails ce WHERE ce.campaign_id = r.campaign_id AND ce.contact_id = r.contact_id LIMIT 1) as is_paused
@@ -33,7 +33,7 @@ router.get('/', (req, res) => {
 // Mark reply as read
 router.post('/:id/read', (req, res) => {
   const db = getDb();
-  const userId = req.session && req.session.userId;
+  const userId = (req.session && req.session.userId) || null;
   db.prepare('UPDATE replies SET is_read = 1 WHERE id = ? AND user_id = ?').run(req.params.id, userId);
   res.json({ success: true });
 });
