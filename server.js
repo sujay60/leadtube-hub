@@ -447,13 +447,12 @@ app.post('/api/research-channel', async (req, res) => {
       'gemini-1.5-pro-latest'
     ];
 
-    const prompt = `Who is the human host or creator of the YouTube channel ${handle} (Channel Name: "${intel.channelName}")? 
+    const prompt = `Identify the specific human host or creator of the YouTube channel ${handle} (Channel Name: "${intel.channelName}").
 
-Use your internal knowledge to identify them.
-Return ONLY their real full human name. 
-Do not include any extra text, quotes, explanations, or punctuation.
-If the channel is a brand, company, or organization with no specific individual host, return "Organization".
-If you do not know the answer, return "Not Found".`;
+Use your internal knowledge and any context to identify the exact person.
+Return ONLY their real full human name.
+Do not include any extra text, quotes, explanations, titles, or punctuation.
+If the channel is a brand, company, or organization with no specific individual host, or if you cannot confidently identify a specific person, return EXACTLY: Team ${intel.channelName || handle}`;
 
     for (const modelName of modelsToTry) {
       try {
@@ -494,8 +493,8 @@ If you do not know the answer, return "Not Found".`;
         if (geminiData.candidates?.[0]?.content?.parts?.[0]?.text) {
           const rawText = geminiData.candidates[0].content.parts[0].text.trim();
           if (rawText) {
-            hostName = rawText.replace(/[."'*]/g, '').trim();
-            if (hostName.toLowerCase() === 'not found' || hostName.toLowerCase() === 'n/a') {
+            hostName = rawText.replace(/["'*]/g, '').trim();
+            if (hostName.toLowerCase() === 'not found' || hostName.toLowerCase() === 'n/a' || hostName.toLowerCase() === 'organization') {
               hostName = '';
             } else {
               runLogs.push(`[Phase 4] ✓ Successful extraction with ${modelName}: "${hostName}"`);
@@ -519,7 +518,14 @@ If you do not know the answer, return "Not Found".`;
     runLogs.push(`[Phase 5] Heuristic result: "${hostName || 'None found'}"`);
   }
 
-  runLogs.push(`[Complete] Final Host Name: "${hostName || 'Not Found'}"`);
+  // ── PHASE 6: Final "Team" Fallback ──
+  if (!hostName || hostName.toLowerCase() === 'organization' || hostName.toLowerCase() === 'not found' || hostName.toLowerCase() === 'n/a') {
+    const fallbackName = intel.channelName || handle;
+    hostName = `Team ${fallbackName}`;
+    runLogs.push(`[Phase 6] Applying final Team fallback: "${hostName}"`);
+  }
+
+  runLogs.push(`[Complete] Final Host Name: "${hostName}"`);
   console.log(`[Creator Research] ═══ RESULT for ${intel.channelName || handle}: "${hostName}" ═══\n`);
 
   res.json({
