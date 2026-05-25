@@ -447,12 +447,25 @@ app.post('/api/research-channel', async (req, res) => {
       'gemini-1.5-pro-latest'
     ];
 
-    const prompt = `Identify the specific human host or creator of the YouTube channel ${handle} (Channel Name: "${intel.channelName}").
+    const contextStr = `
+Available Context:
+- Channel Name: ${intel.channelName}
+- YouTube Title: ${intel.ytTitle || ''}
+- YouTube Description: ${(intel.ytDescription || '').substring(0, 500)}
+- Video Descriptions: ${(intel.videoDescriptions || []).join(' ').substring(0, 500)}
+- Scraped Bio: ${(intel.scrapedDescription || '').substring(0, 500)}
+- Contact Emails: ${intel.email || ''}
+- Names Found on Socials: ${(intel.socialNames || []).join(', ')}
+`;
 
-Use your internal knowledge and any context to identify the exact person.
+    const prompt = `Identify the specific human host or creator of the YouTube channel ${handle}.
+
+Use your internal knowledge and the provided context below to identify the exact person.
 Return ONLY their real full human name.
 Do not include any extra text, quotes, explanations, titles, or punctuation.
-If the channel is a brand, company, or organization with no specific individual host, or if you cannot confidently identify a specific person, return EXACTLY: Team ${intel.channelName || handle}`;
+If the channel is a brand, company, or organization with no specific individual host, or if you cannot confidently identify a specific person, return EXACTLY: Team ${intel.channelName || handle}
+
+${contextStr}`;
 
     for (const modelName of modelsToTry) {
       try {
