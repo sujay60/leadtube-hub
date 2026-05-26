@@ -157,10 +157,11 @@ document.addEventListener('DOMContentLoaded', () => {
 2. Handle (the @handle, e.g. @channelname)
 3. Subscriber Count (e.g. "1.2M subscribers")
 4. Last Upload Time (e.g. "2 days ago", "3 weeks ago")
+5. Last Video Title (the title of the most recent video visible in the screenshot)
 
-Return ONLY a JSON object with these exact keys: channelName, handle, subscribers, lastUpload
+Return ONLY a JSON object with these exact keys: channelName, handle, subscribers, lastUpload, lastVideoTitle
 If a field is not visible, use "N/A".
-Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.2M subscribers","lastUpload":"2 days ago"}`;
+Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.2M subscribers","lastUpload":"2 days ago","lastVideoTitle":"iPhone 15 Review"}`;
 
         // Try each key with rotation
         let lastError = null;
@@ -231,6 +232,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
                     handle: parsed.handle || 'N/A',
                     subscribers: parsed.subscribers || 'N/A',
                     lastUpload: parsed.lastUpload || 'N/A',
+                    lastVideoTitle: parsed.lastVideoTitle || 'N/A',
                     _raw: rawText
                 };
             } catch (err) {
@@ -318,7 +320,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
 
     function parseOcrText(rawText) {
         const lines = rawText.replace(/\r\n/g, '\n').split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        let channelName = 'N/A', handle = 'N/A', subscribers = 'N/A', lastUpload = 'N/A';
+        let channelName = 'N/A', handle = 'N/A', subscribers = 'N/A', lastUpload = 'N/A', lastVideoTitle = 'N/A';
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -362,7 +364,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
                 if (l.length > 3 && l.length < 60) { channelName = cleanName(l); break; }
             }
         }
-        return { channelName, handle, subscribers, lastUpload };
+        return { channelName, handle, subscribers, lastUpload, lastVideoTitle };
     }
 
     function cleanName(raw) {
@@ -502,7 +504,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
                 }
                 addResultToTable({
                     channelName: file.name, handle: '—', subscribers: '—',
-                    lastUpload: `⚠️ ${err.message.substring(0, 40)}`
+                    lastUpload: `⚠️ ${err.message.substring(0, 40)}`, lastVideoTitle: '—'
                 });
             }
             processed++;
@@ -535,7 +537,8 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         const channelName = data.channelName || 'N/A';
         const subs = data.subscribers || 'N/A';
         const lastUpload = data.lastUpload || 'N/A';
-        const rowData = { channelName, handle, subscribers: subs, lastUpload, link };
+        const lastVideoTitle = data.lastVideoTitle || 'N/A';
+        const rowData = { channelName, handle, subscribers: subs, lastUpload, lastVideoTitle, link };
         extractedData.push(rowData);
 
         const tr = document.createElement('tr');
@@ -544,6 +547,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
             <td contenteditable="true" class="editable">${handle}</td>
             <td contenteditable="true" class="editable">${subs}</td>
             <td contenteditable="true" class="editable">${lastUpload}</td>
+            <td contenteditable="true" class="editable">${lastVideoTitle}</td>
             <td>${link ? `<a href="${link}" target="_blank">${handle}</a>` : '<span style="color: var(--text-secondary)">—</span>'}</td>
         `;
         const idx = extractedData.length - 1;
@@ -558,6 +562,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
         });
         cells[2].addEventListener('blur', () => { extractedData[idx].subscribers = cells[2].textContent.trim(); syncActiveLeads(); });
         cells[3].addEventListener('blur', () => { extractedData[idx].lastUpload = cells[3].textContent.trim(); syncActiveLeads(); });
+        cells[4].addEventListener('blur', () => { extractedData[idx].lastVideoTitle = cells[4].textContent.trim(); syncActiveLeads(); });
 
         const emptyMsg = resultsBody.querySelector('.empty-state');
         if (emptyMsg) emptyMsg.remove();
@@ -754,6 +759,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
                 <td>${row.handle || 'N/A'}</td>
                 <td>${row.subscribers || 'N/A'}</td>
                 <td>${row.lastUpload || 'N/A'}</td>
+                <td>${row.lastVideoTitle || 'N/A'}</td>
                 <td>${link ? `<a href="${link}" target="_blank">${row.handle}</a>` : '<span style="color:var(--text-secondary)">—</span>'}</td>
             </tr>`;
         }).join('');
@@ -796,7 +802,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
     });
 
     function exportCSV(data, filename) {
-        const headers = ['Channel Name', 'Handle', 'Subscribers', 'Last Upload', 'Link'];
+        const headers = ['Channel Name', 'Handle', 'Subscribers', 'Last Upload', 'Last Video Title', 'Link'];
         const csvRows = [headers.join(',')];
         for (const row of data) {
             csvRows.push([
@@ -804,6 +810,7 @@ Example: {"channelName":"Tech Reviews","handle":"@techreviews","subscribers":"1.
                 `"${(row.handle || '').replace(/"/g, '""')}"`,
                 `"${(row.subscribers || '').replace(/"/g, '""')}"`,
                 `"${(row.lastUpload || '').replace(/"/g, '""')}"`,
+                `"${(row.lastVideoTitle || '').replace(/"/g, '""')}"`,
                 `"${(row.link || '').replace(/"/g, '""')}"`
             ].join(','));
         }
