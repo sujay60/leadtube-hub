@@ -238,18 +238,7 @@ function heuristicExtractName(data) {
     }
   }
 
-  // 5. Clean channel name — if it looks like a human name
-  let clean = channelName
-    .replace(/[\[(].*?[\])]/g, '')  // remove bracket content
-    .replace(/Official|Channel|Vlogs?|TV|Podcast|Show|Golf|Real\s*Estate|Dubai|Live/gi, '')
-    .replace(/\bMD\b|\bPhD\b|\bPGA\b|\bDr\.?\b|\bMr\.?\b|\bMs\.?\b|\bMrs\.?\b/gi, '')
-    .replace(/[^a-zA-Z\s'-]/g, ' ')
-    .replace(/\s+/g, ' ').trim();
-  const words = clean.split(' ').filter(w => w.length > 1);
-  if (words.length >= 2 && words.length <= 3 &&
-      !/church|ministries|club|hub|news|media|corp|company|agency|group|tips|health|fitness/i.test(clean)) {
-    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  }
+  // 5. Removed aggressive channel name parsing to prevent random name hallucinations
 
   // 6. Org/brand detection
   if (/church|ministries|association|club|hub|news|media|tv|corp|company|group|official/i.test(channelName)) {
@@ -460,10 +449,10 @@ Available Context:
 
     const prompt = `Identify the specific human host or creator of the YouTube channel ${handle}.
 
-Use your internal knowledge and the provided context below to identify the exact person.
+You MUST strictly adhere to the provided context below. Do NOT guess or hallucinate a random name if it is not explicitly mentioned in the context or if you are not 100% certain from your internal knowledge.
 Return ONLY their real full human name.
 Do not include any extra text, quotes, explanations, titles, or punctuation.
-If the channel is a brand, company, or organization with no specific individual host, or if you cannot confidently identify a specific person, return EXACTLY: Team ${intel.channelName || handle}
+If the channel is a brand, company, gaming channel, or organization with no specific individual host, or if you cannot confidently identify a specific person, return EXACTLY: Team ${intel.channelName || handle}
 
 ${contextStr}`;
 
