@@ -336,12 +336,12 @@ async function initDatabase() {
     }
   } catch(e) {}
 
-  console.log('  ✅ Database initialized (better-sqlite3)');
+  console.log('  ✅ Database initialized (sql.js)');
 }
 
 function getDb() {
-  if (!db) throw new Error('Database not initialized. Call initDatabase() first.');
-  return db;
+  if (!dbWrapper) throw new Error('Database not initialized. Call initDatabase() first.');
+  return dbWrapper;
 }
 
 module.exports = { getDb, initDatabase };
