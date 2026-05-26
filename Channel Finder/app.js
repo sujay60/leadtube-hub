@@ -691,6 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         const analysis = await deepAnalyzeChannel(item.id.channelId);
                         item.emails = analysis.emails;
+                        item.latestVideoTitle = analysis.latestVideoTitle;
                         scannedCount++;
                         
                         // Update the card in the UI if it exists
@@ -766,7 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Last Upload,Icebreaker,Link\n";
+        let csvContent = "data:text/csv;charset=utf-8,Channel Name,Subscribers,Emails,Last Upload,Icebreaker,Last Video Title,Link\n";
         cards.forEach(card => {
             const name = card.querySelector('.card-title').textContent.replace(/,/g, '');
             const statsElements = card.querySelectorAll('.stats');
@@ -777,9 +778,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const icebreakerDiv = card.querySelector('.icebreaker-tag');
             let icebreaker = icebreakerDiv ? icebreakerDiv.dataset.icebreaker : '';
             icebreaker = icebreaker.replace(/"/g, '""'); // escape quotes for CSV
+            const lastVideoDiv = card.querySelector('.lastvideo-tag');
+            let lastVideo = lastVideoDiv ? lastVideoDiv.dataset.lastvideo : '';
+            lastVideo = lastVideo.replace(/"/g, '""'); // escape quotes for CSV
             const id = card.querySelector('.btn-inspect').dataset.id;
             const link = `https://youtube.com/channel/${id}`;
-            csvContent += `"${name}","${subs}","${emails}","${lastUpload}","${icebreaker}","${link}"\n`;
+            csvContent += `"${name}","${subs}","${emails}","${lastUpload}","${icebreaker}","${lastVideo}","${link}"\n`;
         });
 
         const encodedUri = encodeURI(csvContent);
@@ -840,6 +844,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     ${item.emails && item.emails.length > 0 ? `
                         <div class="email-tag">${item.emails.join(', ')}</div>
+                    ` : ''}
+                    ${item.latestVideoTitle ? `
+                        <div class="lastvideo-tag" style="display:none;" data-lastvideo="${item.latestVideoTitle.replace(/"/g, '&quot;')}"></div>
                     ` : ''}
                     ${item.icebreaker ? `
                         <div class="icebreaker-tag" style="display:none;" data-icebreaker="${item.icebreaker.replace(/"/g, '&quot;')}"></div>
