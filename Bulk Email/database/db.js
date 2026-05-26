@@ -1,97 +1,30 @@
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'mailblast.db');
-let dbWrapper = null;
-
-class DbWrapper {
-  constructor(sqlDb) {
-    this.db = sqlDb;
-    this._inTransaction = false;
-  }
-  prepare(sql) {
-    const db = this.db;
-    const self = this;
-    return {
-      run(...params) {
-        db.run(sql, params);
-        const rid = db.exec("SELECT last_insert_rowid()");
-        const result = {
-          lastInsertRowid: rid.length ? rid[0].values[0][0] : 0,
-          changes: db.getRowsModified()
-        };
-        if (!self._inTransaction) self._save();
-        return result;
-      },
-      get(...params) {
-        let result = null;
-        try {
-          const stmt = db.prepare(sql);
-          if (params.length) stmt.bind(params);
-          if (stmt.step()) result = stmt.getAsObject();
-          stmt.free();
-        } catch (e) { console.error('DB get error:', e.message, sql); }
-        return result;
-      },
-      all(...params) {
-        const results = [];
-        try {
-          const stmt = db.prepare(sql);
-          if (params.length) stmt.bind(params);
-          while (stmt.step()) results.push(stmt.getAsObject());
-          stmt.free();
-        } catch (e) { console.error('DB all error:', e.message, sql); }
-        return results;
-      }
-    };
-  }
-  exec(sql) {
-    this.db.exec(sql);
-    if (!this._inTransaction) this._save();
-  }
-  pragma(str) {
-    try { this.db.exec(`PRAGMA ${str}`); } catch(e) {}
-  }
-  transaction(fn) {
-    const self = this;
-    return (...args) => {
-      self._inTransaction = true;
-      self.db.exec("BEGIN TRANSACTION");
-      try {
-        fn(...args);
-        self.db.exec("COMMIT");
-        self._inTransaction = false;
-        self._save();
-      } catch (e) {
-        self._inTransaction = false;
-        try { self.db.exec("ROLLBACK"); } catch(re) {}
-        throw e;
-      }
-    };
-  }
-  _save() {
-    try {
-      const data = this.db.export();
-      fs.writeFileSync(DB_PATH, Buffer.from(data));
-    } catch (e) {}
-  }
-}
+let db = null;
 
 async function initDatabase() {
+  // Ensure the directory exists
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const SQL = await initSqlJs();
-  let sqlDb;
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    sqlDb = new SQL.Database(fileBuffer);
-  } else {
-    sqlDb = new SQL.Database();
-  }
-  dbWrapper = new DbWrapper(sqlDb);
-  const db = dbWrapper;
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  // Add all() and get() fallbacks just in case there are subtle differences
+  const originalPrepare = db.prepare.bind(db);
+  db.prepare = (sql) => {
+    const stmt = originalPrepare(sql);
+    const originalGet = stmt.get.bind(stmt);
+    stmt.get = (...args) => {
+      const result = originalGet(...args);
+      return result === undefined ? null : result;
+    };
+    return stmt;
+  };
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -336,12 +269,12 @@ async function initDatabase() {
     }
   } catch(e) {}
 
-  console.log('  ✅ Database initialized (sql.js)');
+  console.log('  ✅ Database initialized (better-sqlite3)');
 }
 
 function getDb() {
-  if (!dbWrapper) throw new Error('Database not initialized. Call initDatabase() first.');
-  return dbWrapper;
+  if (!db) throw new Error('Database not initialized. Call initDatabase() first.');
+  return db;
 }
 
 module.exports = { getDb, initDatabase };
