@@ -10,7 +10,7 @@ RUN npm install --omit=dev
 COPY . .
 
 # Create directories for persistent data and uploads
-RUN mkdir -p /data /app/Bulk\ Email/uploads
+RUN mkdir -p /data "/app/Bulk Email/uploads"
 
 EXPOSE 8080
 

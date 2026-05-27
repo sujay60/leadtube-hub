@@ -72,7 +72,7 @@ async function scanInboxes() {
   }
 }
 
-async function processReply(db, account, messageId, refIds, subject, body_text, body_html) {
+async function processReply(db, account, messageId, refIds, subject, body_text, body_html, fromAddress) {
   if (refIds.length === 0) return false;
 
   const existing = db.prepare('SELECT id FROM replies WHERE message_id = ?').get(messageId);
@@ -86,6 +86,18 @@ async function processReply(db, account, messageId, refIds, subject, body_text, 
     `).get(refId, `<${cleanRefId}>`);
 
     if (sentRecord) {
+      const fromLower = (fromAddress || '').toLowerCase();
+      const subjLower = (subject || '').toLowerCase();
+      const isBounce = fromLower.includes('mailer-daemon') || fromLower.includes('postmaster') || fromLower.includes('bounce') ||
+                       subjLower.includes('delivery status notification') || subjLower.includes('undeliverable') || 
+                       subjLower.includes('delivery failure') || subjLower.includes('returned mail');
+
+      if (isBounce) {
+        db.prepare("UPDATE campaign_emails SET status = 'failed', error_message = 'Bounced: Delivery failed', is_skipped = 1 WHERE id = ?").run(sentRecord.id);
+        console.log(`  ❌ Bounce detected for contact ${sentRecord.contact_id}! Marked as failed and skipped.`);
+        return true;
+      }
+
       const threadId = sentRecord.campaign_id + '-' + sentRecord.contact_id;
 
       db.prepare(`
@@ -136,10 +148,11 @@ async function scanOAuthInbox(account, db) {
     if (inReplyTo) refIds.push(inReplyTo.trim());
     if (references) refIds = refIds.concat(references.split(/\s+/).filter(Boolean));
 
+    const fromAddress = (headers.find(h => h.name.toLowerCase() === 'from') || {}).value || '';
     const subject = (headers.find(h => h.name.toLowerCase() === 'subject') || {}).value || 'Re:';
     const { body_text, body_html } = getMessageBody(fullMsg.data.payload);
 
-    await processReply(db, account, messageId, refIds, subject, body_text, body_html);
+    await processReply(db, account, messageId, refIds, subject, body_text, body_html, fromAddress);
   }
 }
 
@@ -181,7 +194,8 @@ async function scanImapInbox(account, db) {
       if (parsed.inReplyTo) refIds = refIds.concat(Array.isArray(parsed.inReplyTo) ? parsed.inReplyTo : [parsed.inReplyTo]);
       if (parsed.references) refIds = refIds.concat(Array.isArray(parsed.references) ? parsed.references : [parsed.references]);
 
-      await processReply(db, account, messageId, refIds, parsed.subject || 'Re:', parsed.text || body_text, parsed.html || body_html);
+      const fromAddress = parsed.from && parsed.from.text ? parsed.from.text : '';
+      await processReply(db, account, messageId, refIds, parsed.subject || 'Re:', parsed.text || '', parsed.html || '', fromAddress);
     }
   } finally {
     if (connection) connection.end();
