@@ -100,7 +100,7 @@ router.get('/:id/status', (req, res) => {
 
 // Create campaign with custom delay, round-robin, and tree sequence
 router.post('/', (req, res) => {
-  const { name, group_id, account_id, account_ids, delay_ms, tree } = req.body;
+  const { name, group_id, account_id, account_ids, delay_ms, tree, daily_limit } = req.body;
   const ids = account_ids && account_ids.length ? account_ids : (account_id ? [account_id] : []);
   
   if (!name || !group_id || !ids.length || !tree || !tree.length) {
@@ -119,9 +119,9 @@ router.post('/', (req, res) => {
 
   const contactCount = db.prepare('SELECT COUNT(*) as count FROM contacts WHERE group_id = ? AND user_id = ?').get(group_id, userId);
   const result = db.prepare(`
-    INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, account_ids, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, rootTpl.lastInsertRowid, group_id, ids[0], contactCount.count, delay_ms || 2000, JSON.stringify(ids), userId);
+    INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, account_ids, user_id, daily_limit)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, rootTpl.lastInsertRowid, group_id, ids[0], contactCount.count, delay_ms || 2000, JSON.stringify(ids), userId, daily_limit ? parseInt(daily_limit) : 0);
 
   const rootCampaignId = result.lastInsertRowid;
 
@@ -143,10 +143,10 @@ router.post('/', (req, res) => {
         );
         
         const fuResult = db.prepare(`
-          INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id)
-          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?)
+          INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id, daily_limit)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?, ?)
         `).run(
-          `Follow-up branch: ${name}`, tpl.lastInsertRowid, group_id, ids[0], delay_ms || 2000, dbIds[node.parentId], node.delay_days || 1, node.condition || 'not_opened', JSON.stringify(ids), userId
+          `Follow-up branch: ${name}`, tpl.lastInsertRowid, group_id, ids[0], delay_ms || 2000, dbIds[node.parentId], node.delay_days || 1, node.condition || 'not_opened', JSON.stringify(ids), userId, daily_limit ? parseInt(daily_limit) : 0
         );
         
         dbIds[node.id] = fuResult.lastInsertRowid;
@@ -245,6 +245,17 @@ router.post('/:id/delay', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE campaigns SET delay_ms = ? WHERE id = ?').run(delay_ms, req.params.id);
   res.json({ success: true });
+});
+
+// Toggle skip status for an email
+router.post('/:id/emails/:emailId/skip', (req, res) => {
+  const db = getDb();
+  const current = db.prepare('SELECT is_skipped FROM campaign_emails WHERE id = ? AND campaign_id = ?').get(req.params.emailId, req.params.id);
+  if (!current) return res.status(404).json({ error: 'Email record not found' });
+  
+  const newStatus = current.is_skipped ? 0 : 1;
+  db.prepare('UPDATE campaign_emails SET is_skipped = ? WHERE id = ?').run(newStatus, req.params.emailId);
+  res.json({ success: true, is_skipped: newStatus });
 });
 
 // Create follow-up campaign

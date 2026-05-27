@@ -101,6 +101,12 @@ function resumeCampaign(campaignId) {
   }
   const db = getDb();
   db.prepare("UPDATE campaigns SET is_paused = 0, status = 'sending' WHERE id = ?").run(campaignId);
+  if (!state) {
+    sendCampaignEmails(campaignId).catch(err => {
+      console.error(`Campaign ${campaignId} resume send error:`, err.message);
+      db.prepare("UPDATE campaigns SET status = 'failed' WHERE id = ?").run(campaignId);
+    });
+  }
 }
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -235,13 +241,18 @@ async function sendCampaignEmails(campaignId) {
   const isFollowUp = !!campaign.follow_up_of;
   console.log(`  📧 Campaign ${campaignId}${isFollowUp ? ' (follow-up, same thread)' : ''}: Round-robin across ${accounts.map(a => a.email).join(', ')}`);
 
-  const emailRecords = db.prepare(`
+  let query = `
     SELECT ce.*, c.email, c.first_name, c.last_name, c.channel_name, c.channel_url,
            c.subscriber_count, c.niche, c.country, c.language, c.custom_fields
     FROM campaign_emails ce
     JOIN contacts c ON ce.contact_id = c.id
-    WHERE ce.campaign_id = ? AND ce.status = 'pending' AND ce.replied_at IS NULL AND (ce.is_paused = 0 OR ce.is_paused IS NULL)
-  `).all(campaignId);
+    WHERE ce.campaign_id = ? AND ce.status = 'pending' AND ce.replied_at IS NULL AND (ce.is_paused = 0 OR ce.is_paused IS NULL) AND ce.is_skipped = 0
+  `;
+  if (campaign.daily_limit && campaign.daily_limit > 0) {
+    query += ` LIMIT ${campaign.daily_limit}`;
+  }
+  
+  const emailRecords = db.prepare(query).all(campaignId);
 
   const delay = campaign.delay_ms || 2000;
   let baseUrl = process.env.BASE_URL || 'https://leadtube.onrender.com';
@@ -346,8 +357,16 @@ async function sendCampaignEmails(campaignId) {
   }
 
   activeCampaigns.delete(campaignId);
-  db.prepare("UPDATE campaigns SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(campaignId);
-  triggerNextStep(campaignId, db);
+
+  const pendingCount = db.prepare("SELECT COUNT(*) as count FROM campaign_emails WHERE campaign_id = ? AND status = 'pending' AND is_skipped = 0 AND (is_paused = 0 OR is_paused IS NULL) AND replied_at IS NULL").get(campaignId).count;
+
+  if (pendingCount > 0) {
+    console.log(`  ⏸ Campaign ${campaignId} paused because it hit the daily limit. Remaining: ${pendingCount}`);
+    db.prepare("UPDATE campaigns SET status = 'paused' WHERE id = ?").run(campaignId);
+  } else {
+    db.prepare("UPDATE campaigns SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(campaignId);
+    triggerNextStep(campaignId, db);
+  }
 }
 
 // Create follow-up campaign with auto-scheduling
@@ -400,13 +419,13 @@ async function createFollowUp(parentCampaignId, templateId, condition, delayDays
     const scheduledStr = scheduledAt.toISOString().slice(0, 19).replace('T', ' ');
 
     const result = db.prepare(`
-      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, scheduled_send_at, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
+      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, scheduled_send_at, user_id, daily_limit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
     `).run(
       `Follow-up #${stepCount}: ${rootName}`,
       templateId, parent.group_id, parent.account_id, contacts.length,
       parent.delay_ms || 2000, parentCampaignId, delayDays || 1, condition,
-      parent.account_ids || '[]', scheduledStr, parent.user_id
+      parent.account_ids || '[]', scheduledStr, parent.user_id, parent.daily_limit || 0
     );
 
     for (const c of contacts) {
@@ -417,13 +436,13 @@ async function createFollowUp(parentCampaignId, templateId, condition, delayDays
     return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
   } else {
     const result = db.prepare(`
-      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id)
-      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?)
+      INSERT INTO campaigns (name, template_id, group_id, account_id, total_emails, delay_ms, follow_up_of, follow_up_days, follow_up_condition, account_ids, status, user_id, daily_limit)
+      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'draft', ?, ?)
     `).run(
       `Follow-up #${stepCount}: ${rootName}`,
       templateId, parent.group_id, parent.account_id,
       parent.delay_ms || 2000, parentCampaignId, delayDays || 1, condition,
-      parent.account_ids || '[]', parent.user_id
+      parent.account_ids || '[]', parent.user_id, parent.daily_limit || 0
     );
     return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
   }

@@ -117,6 +117,10 @@ const CampaignsComponent = {
               ${window._appGroups.map(g => `<option value="${g.id}">${escapeHtml(g.name)} (${g.contact_count} contacts)</option>`).join('')}
             </select>
           </div>
+          <div class="form-group mb-0">
+            <label class="form-label">Daily Send Limit (0=all)</label>
+            <input type="number" class="form-input" id="seq-daily-limit" value="0" min="0" />
+          </div>
         </div>
         <div class="form-group mt-4 mb-0">
           <label class="form-label">Send From (select multiple for round-robin)</label>
@@ -281,6 +285,7 @@ const CampaignsComponent = {
       group_id: parseInt(document.getElementById('seq-camp-group').value),
       account_ids: checkedAccounts,
       delay_ms: 2000,
+      daily_limit: parseInt(document.getElementById('seq-daily-limit').value) || 0,
       tree: window._seqTree
     };
 
@@ -508,16 +513,19 @@ const CampaignsComponent = {
             </div>
           ` : ''}
           <div class="table-container">
-            <table><thead><tr><th>Contact</th><th>Email</th><th>Status</th><th>Error</th><th>Opened</th><th>Clicked</th><th>Sent At</th></tr></thead>
+            <table><thead><tr><th>Contact</th><th>Email</th><th>Status</th><th>Error</th><th>Opened</th><th>Clicked</th><th>Sent At</th><th>Action</th></tr></thead>
             <tbody>
               ${(c.emails||[]).map(e => `<tr>
                 <td>${escapeHtml(e.first_name||e.channel_name||'—')}</td>
                 <td>${escapeHtml(e.email)}</td>
-                <td><span class="badge badge-${e.status==='sent'?'green':e.status==='failed'?'red':'slate'}">${e.status}</span></td>
+                <td><span class="badge badge-${e.is_skipped ? 'slate' : (e.status==='sent'?'green':e.status==='failed'?'red':'slate')}">${e.is_skipped ? 'skipped' : e.status}</span></td>
                 <td style="max-width:240px;font-size:.78rem;color:var(--red,#ef4444);">${e.error_message ? escapeHtml(e.error_message) : '—'}</td>
                 <td>${e.opened_at ? '✅ ' + formatDate(e.opened_at) : '—'}</td>
                 <td>${e.clicked_at ? '✅ ' + formatDate(e.clicked_at) : '—'}</td>
                 <td>${formatDate(e.sent_at)}</td>
+                <td>
+                  ${e.status === 'pending' ? `<button class="btn btn-secondary btn-sm" onclick="CampaignsComponent.skipEmail(${c.id}, ${e.id})" style="font-size:.7rem;padding:2px 6px;">${e.is_skipped ? 'Unskip' : 'Skip'}</button>` : '—'}
+                </td>
               </tr>`).join('')}
             </tbody></table>
           </div>
@@ -771,6 +779,15 @@ Best regards"></textarea>
       showToast('Failed emails reset — resending now!', 'success');
       this.showDetails(id);
     } catch(e) { showToast('Retry failed: ' + e.message, 'error'); }
+  },
+
+  async skipEmail(campaignId, emailId) {
+    try {
+      await API.post(`/api/campaigns/${campaignId}/emails/${emailId}/skip`);
+      this.showDetails(campaignId);
+    } catch (e) {
+      showToast('Error: ' + e.message, 'error');
+    }
   },
 
   async resetStuck(id) {

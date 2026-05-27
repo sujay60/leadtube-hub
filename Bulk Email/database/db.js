@@ -316,7 +316,9 @@ async function initDatabase() {
     "ALTER TABLE contact_groups ADD COLUMN user_id INTEGER",
     "ALTER TABLE contacts ADD COLUMN user_id INTEGER",
     "ALTER TABLE campaigns ADD COLUMN user_id INTEGER",
-    "ALTER TABLE replies ADD COLUMN user_id INTEGER"
+    "ALTER TABLE replies ADD COLUMN user_id INTEGER",
+    "ALTER TABLE campaigns ADD COLUMN daily_limit INTEGER DEFAULT 0",
+    "ALTER TABLE campaign_emails ADD COLUMN is_skipped INTEGER DEFAULT 0"
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch(e) { /* column or table update already applied */ }

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "csv-parse": "^5.6.0",
+    "deep-email-validator": "^0.1.27",
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
     "express-session": "^1.18.1",
